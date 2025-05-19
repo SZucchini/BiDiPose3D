@@ -1,0 +1,37 @@
+[project]
+name = "template"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "torch==2.5.1+cu124",
+    "torchvision==0.20.1+cu124",
+    "markupsafe<3.0.2",  # need to install torch (2025.05.10)
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+extra-index-url = ["https://download.pytorch.org/whl/cu124"]
+dev-dependencies = [
+    "jupyter>=1.1.1",
+    "pytest>=8.3.3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src",
+]
+
+[tool.pyright]
+typeCheckingMode = "off"
+include = [
+    "src",
+    "scripts",
+]
+ignore = [
+    "data",
+]
