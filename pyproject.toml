@@ -1,5 +1,5 @@
 [project]
-name = "template"
+name = "bidipose"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -7,7 +7,8 @@ requires-python = ">=3.12"
 dependencies = [
     "torch==2.5.1+cu124",
     "torchvision==0.20.1+cu124",
-    "markupsafe<3.0.2",  # need to install torch (2025.05.10)
+    "markupsafe<3.0.2", # need to install torch (2025.05.10)
+    "spacepy>=0.7.0",
 ]
 
 [build-system]
@@ -23,13 +24,13 @@ dev-dependencies = [
 
 [tool.hatch.build.targets.wheel]
 packages = [
-    "src",
+    "bidipose",
 ]
 
 [tool.pyright]
 typeCheckingMode = "off"
 include = [
-    "src",
+    "bidipose",
     "scripts",
 ]
 ignore = [
