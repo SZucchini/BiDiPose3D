@@ -9,6 +9,7 @@ dependencies = [
     "torchvision==0.20.1+cu124",
     "markupsafe<3.0.2", # need to install torch (2025.05.10)
     "spacepy>=0.7.0",
+    "timm>=1.0.15",
 ]
 
 [build-system]
