@@ -10,6 +10,7 @@ from collections import OrderedDict
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .drop import DropPath
 
@@ -363,15 +364,15 @@ class Block(nn.Module):
 class DSTformer(nn.Module):
     def __init__(
         self,
-        dim_in=3,
-        dim_out=3,
+        dim_in=4,
+        dim_out=4,
         dim_feat=256,
         dim_rep=512,
         depth=5,
         num_heads=8,
         mlp_ratio=4,
         num_joints=17,
-        maxlen=243,
+        maxlen=88,
         qkv_bias=True,
         qk_scale=None,
         drop_rate=0.0,
@@ -384,6 +385,12 @@ class DSTformer(nn.Module):
         self.dim_out = dim_out
         self.dim_feat = dim_feat
         self.joints_embed = nn.Linear(dim_in, dim_feat)
+
+        self.quat_embed = nn.Linear(1, dim_feat)
+        self.trans_embed = nn.Linear(1, dim_feat)
+        self.type_embed = nn.Parameter(torch.zeros(3, 1, 1, dim_feat))
+        trunc_normal_(self.type_embed, std=0.02)
+
         self.pos_drop = nn.Dropout(p=drop_rate)
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
         self.blocks_st = nn.ModuleList(
@@ -426,6 +433,10 @@ class DSTformer(nn.Module):
         else:
             self.pre_logits = nn.Identity()
         self.head = nn.Linear(dim_rep, dim_out) if dim_out > 0 else nn.Identity()
+
+        self.quat_linear = nn.Linear(dim_out, 1)
+        self.trans_linear = nn.Linear(dim_out, 1)
+
         self.temp_embed = nn.Parameter(torch.zeros(1, maxlen, 1, dim_feat))
         self.pos_embed = nn.Parameter(torch.zeros(1, num_joints, dim_feat))
         trunc_normal_(self.temp_embed, std=0.02)
@@ -454,35 +465,71 @@ class DSTformer(nn.Module):
         self.dim_out = dim_out
         self.head = nn.Linear(self.dim_feat, dim_out) if dim_out > 0 else nn.Identity()
 
-    def forward(self, x, return_rep=False):
-        B, F, J, C = x.shape
-        x = x.reshape(-1, J, C)
-        BF = x.shape[0]
+    def forward(
+        self,
+        x: torch.Tensor,
+        quat: torch.Tensor,
+        trans: torch.Tensor,
+        t: torch.Tensor | None = None,
+        return_rep: bool = False,
+    ):
+        """Forward pass of the MotionAGFormer model.
+
+        Args:
+            x (torch.Tensor): Input 2D from two-views (B, T, J, C=2*2).
+            quat (torch.Tensor): Quaternions for cam1 to cam2 (B, 4, 1).
+            trans (torch.Tensor): Translation vector for cam1 to cam2 (B, 3, 1).
+            t (torch.Tensor): Time step embedding.  # NOTE: We need to decide the shape.
+            return_rep (bool): If True, returns the representation logits instead of the final output.
+
+        Returns:
+            pred_pose (torch.Tensor): Predicted 2D poses from 2 views (B, T, J, 2*2).
+            pred_quat (torch.Tensor): Predicted quaternion (B, 4, 1).
+            pred_trans (torch.Tensor): Predicted translation (B, 3, 1).
+
+        """
+        bs, frames, joints, _ = x.shape
         x = self.joints_embed(x)
-        x = x + self.pos_embed
-        _, J, C = x.shape
-        x = x.reshape(-1, F, J, C) + self.temp_embed[:, :F, :, :]
-        x = x.reshape(BF, J, C)
+        x = x + self.pos_embed + self.type_embed[0]
+
+        quat = self.quat_embed(quat).unsqueeze(2)
+        quat = quat.expand(-1, -1, joints, -1) + self.pos_embed + self.type_embed[1]
+        trans = self.trans_embed(trans).unsqueeze(2)
+        trans = trans.expand(-1, -1, joints, -1) + self.pos_embed + self.type_embed[2]
+
+        x = torch.cat((x, quat, trans), dim=1)
+        # x = x + t  NOTE: It depends on the shape of t.
+
+        frames_all = x.shape[1]
+        x = x + self.temp_embed[:, :frames_all, :, :]
+        x = x.reshape(bs * frames_all, joints, self.dim_feat)
         x = self.pos_drop(x)
+
         for idx, (blk_st, blk_ts) in enumerate(zip(self.blocks_st, self.blocks_ts, strict=False)):
-            x_st = blk_st(x, F)
-            x_ts = blk_ts(x, F)
+            x_st = blk_st(x, frames_all)
+            x_ts = blk_ts(x, frames_all)
             if self.att_fuse:
-                att = self.ts_attn[idx]
-                alpha = torch.cat([x_st, x_ts], dim=-1)
-                BF, J = alpha.shape[:2]
-                alpha = att(alpha)
-                alpha = alpha.softmax(dim=-1)
-                x = x_st * alpha[:, :, 0:1] + x_ts * alpha[:, :, 1:2]
+                alpha = self.ts_attn[idx](torch.cat([x_st, x_ts], dim=-1)).softmax(dim=-1)
+                x = x_st * alpha[..., 0:1] + x_ts * alpha[..., 1:2]
             else:
-                x = (x_st + x_ts) * 0.5
-        x = self.norm(x)
-        x = x.reshape(B, F, J, -1)
-        x = self.pre_logits(x)  # [B, F, J, dim_feat]
+                x = 0.5 * (x_st + x_ts)
+
+        x = self.norm(x).reshape(bs, frames_all, joints, -1)
+        rep = self.pre_logits(x)
         if return_rep:
-            return x
-        x = self.head(x)
-        return x
+            return rep
+        out = self.head(rep)
+
+        pred_pose = out[:, :frames, :, :]
+        pred_quat = out[:, frames : frames + 4, :, :].mean(dim=2)
+        pred_quat = F.normalize(self.quat_linear(pred_quat), dim=1)
+        neg_mask = pred_quat[..., 0] < 0
+        pred_quat[neg_mask] = -pred_quat[neg_mask]
+
+        pred_trans = out[:, frames + 4 :, :, :].mean(dim=2)
+        pred_trans = F.normalize(self.trans_linear(pred_trans), dim=1)
+
+        return pred_pose, pred_quat, pred_trans
 
     def get_representation(self, x):
         return self.forward(x, return_rep=True)
