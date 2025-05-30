@@ -8,12 +8,10 @@ class DiffusionSampler:
     DiffusionSampler performs sampling from a diffusion model, supporting mask inpainting.
 
     Args:
-        model (nn.Module): The trained diffusion model.
         betas (torch.Tensor): Beta values for the noise schedule (1D tensor).
         device (Optional[torch.device]): Device for computation.
 
     Attributes:
-        model (nn.Module): The diffusion model.
         num_steps (int): Number of diffusion steps.
         betas (torch.Tensor): Noise schedule.
         alphas (torch.Tensor): 1 - betas.
