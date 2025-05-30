@@ -6,6 +6,7 @@ Details of the original repository is as follows:
 from collections import OrderedDict
 
 import torch
+import torch.nn.functional as F
 from timm.layers import DropPath
 from torch import nn
 
@@ -308,10 +309,10 @@ class MotionAGFormer(nn.Module):
     def __init__(
         self,
         n_layers,
-        dim_in,
         dim_feat,
+        dim_in=4,
         dim_rep=512,
-        dim_out=3,
+        dim_out=4,
         mlp_ratio=4,
         act_layer=nn.GELU,
         attn_drop=0.0,
@@ -330,7 +331,7 @@ class MotionAGFormer(nn.Module):
         use_tcn=False,
         graph_only=False,
         neighbour_num=4,
-        n_frames=243,
+        n_frames=88,
     ):
         """:param n_layers: Number of layers.
         :param dim_in: Input dimension.
@@ -360,7 +361,12 @@ class MotionAGFormer(nn.Module):
         super().__init__()
 
         self.joints_embed = nn.Linear(dim_in, dim_feat)
+        self.quat_embed = nn.Linear(1, dim_feat)
+        self.quat_linear = nn.Linear(dim_out, 1)
+        self.trans_embed = nn.Linear(1, dim_feat)
+        self.trans_linear = nn.Linear(dim_out, 1)
         self.pos_embed = nn.Parameter(torch.zeros(1, num_joints, dim_feat))
+        self.type_embed = nn.Parameter(torch.zeros(3, 1, 1, dim_feat))
         self.norm = nn.LayerNorm(dim_feat)
 
         self.layers = create_layers(
@@ -390,12 +396,34 @@ class MotionAGFormer(nn.Module):
 
         self.head = nn.Linear(dim_rep, dim_out)
 
-    def forward(self, x, return_rep=False):
-        """:param x: tensor with shape [B, T, J, C] (T=243, J=17, C=3)
-        :param return_rep: Returns motion representation feature volume (In case of using this as backbone)
+    def forward(
+        self, x: torch.Tensor, quat: torch.Tensor, trans: torch.Tensor, t: torch.Tensor | None = None, return_rep=False
+    ):
+        """Forward pass of the MotionAGFormer model.
+
+        Args:
+            x (torch.Tensor): Input 2D from two-views (B, T, J, C=2*2).
+            quat (torch.Tensor): Quaternions for cam1 to cam2 (B, 4, 1).
+            trans (torch.Tensor): Translation vector for cam1 to cam2 (B, 3, 1).
+            t (torch.Tensor): Time step embedding.  # NOTE: We need to decide the shape.
+            return_rep (bool): If True, returns the representation logits instead of the final output.
+
+        Returns:
+            pred_pose (torch.Tensor): Predicted 2D poses from 2 views (B, T, J, 2*2).
+            pred_quat (torch.Tensor): Predicted quaternion (B, 4, 1).
+            pred_trans (torch.Tensor): Predicted translation (B, 3, 1).
+
         """
-        x = self.joints_embed(x)
-        x = x + self.pos_embed
+        _, frames, joints, _ = x.shape
+        x = self.joints_embed(x)  # (B, T, J, D)
+        x = x + self.pos_embed + self.type_embed[0]
+
+        quat = self.quat_embed(quat).unsqueeze(2)  # (B, 4, 1, D)
+        quat = quat.expand(-1, -1, joints, -1) + self.pos_embed + self.type_embed[1]  # (B, 4, J, D)
+        trans = self.trans_embed(trans).unsqueeze(2)  # (B, 3, 1, D)
+        trans = trans.expand(-1, -1, joints, -1) + self.pos_embed + self.type_embed[2]  # (B, 3, J, D)
+        x = torch.cat((x, quat, trans), dim=1)  # (B, T+7, J, D)
+        # x = x + t  NOTE: It depends on the shape of t.
 
         for layer in self.layers:
             x = layer(x)
@@ -405,6 +433,16 @@ class MotionAGFormer(nn.Module):
         if return_rep:
             return x
 
-        x = self.head(x)
+        x = self.head(x)  # (B, T+7, J, D_out)
+        pred_pose = x[:, :frames, :, :]  # (B, T, J, D_out)
 
-        return x
+        pred_quat = x[:, frames : frames + 4, :, :].mean(dim=2)  # (B, 4, D_out)
+        pred_quat = self.quat_linear(pred_quat)  # (B, 4, 1)
+        pred_quat = F.normalize(pred_quat, dim=1)
+        mask = pred_quat[..., 0] < 0
+        pred_quat[mask] = -pred_quat[mask]
+
+        pred_trans = x[:, frames + 4 :, :, :].mean(dim=2)  # (B, 3, D_out)
+        pred_trans = self.trans_linear(pred_trans)  # (B, 3, 1)
+        pred_trans = F.normalize(pred_trans, dim=1)
+        return pred_pose, pred_quat, pred_trans
