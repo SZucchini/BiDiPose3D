@@ -397,7 +397,12 @@ class MotionAGFormer(nn.Module):
         self.head = nn.Linear(dim_rep, dim_out)
 
     def forward(
-        self, x: torch.Tensor, quat: torch.Tensor, trans: torch.Tensor, t: torch.Tensor | None = None, return_rep=False
+        self,
+        x: torch.Tensor,
+        quat: torch.Tensor,
+        trans: torch.Tensor,
+        t: torch.Tensor | None = None,
+        return_rep: bool = False,
     ):
         """Forward pass of the MotionAGFormer model.
 
