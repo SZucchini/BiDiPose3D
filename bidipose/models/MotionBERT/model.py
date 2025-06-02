@@ -12,6 +12,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from bidipose.models.base import BaseModel
+
 from .drop import DropPath
 
 
@@ -361,7 +363,7 @@ class Block(nn.Module):
         return x
 
 
-class DSTformer(nn.Module):
+class DSTformer(BaseModel):
     def __init__(
         self,
         dim_in=4,

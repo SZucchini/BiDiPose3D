@@ -10,6 +10,8 @@ import torch.nn.functional as F
 from timm.layers import DropPath
 from torch import nn
 
+from bidipose.models.base import BaseModel
+
 from .modules.attention import Attention
 from .modules.graph import GCN
 from .modules.mlp import MLP
@@ -303,7 +305,7 @@ def create_layers(
     return layers
 
 
-class MotionAGFormer(nn.Module):
+class MotionAGFormer(BaseModel):
     """MotionAGFormer, the main class of our model."""
 
     def __init__(
