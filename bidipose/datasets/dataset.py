@@ -1,3 +1,5 @@
+"""Dataset for stereo camera keypoints from Human3.6M or HML3D datasets."""
+
 import glob
 
 import numpy as np
