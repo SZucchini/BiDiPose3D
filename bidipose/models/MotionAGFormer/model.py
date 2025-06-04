@@ -312,9 +312,9 @@ class MotionAGFormer(BaseModel):
         self,
         n_layers,
         dim_feat,
-        dim_in=4,
+        dim_in=6,
         dim_rep=512,
-        dim_out=4,
+        dim_out=6,
         mlp_ratio=4,
         act_layer=nn.GELU,
         attn_drop=0.0,
@@ -409,14 +409,14 @@ class MotionAGFormer(BaseModel):
         """Forward pass of the MotionAGFormer model.
 
         Args:
-            x (torch.Tensor): Input 2D from two-views (B, T, J, C=2*2).
+            x (torch.Tensor): Input 2D from two-views (B, T, J, C=3*2).
             quat (torch.Tensor): Quaternions for cam1 to cam2 (B, 4, 1).
             trans (torch.Tensor): Translation vector for cam1 to cam2 (B, 3, 1).
             t (torch.Tensor): Time step embedding.  # NOTE: We need to decide the shape.
             return_rep (bool): If True, returns the representation logits instead of the final output.
 
         Returns:
-            pred_pose (torch.Tensor): Predicted 2D poses from 2 views (B, T, J, 2*2).
+            pred_pose (torch.Tensor): Predicted 2D poses from 2 views (B, T, J, 3*2).
             pred_quat (torch.Tensor): Predicted quaternion (B, 4, 1).
             pred_trans (torch.Tensor): Predicted translation (B, 3, 1).
 
