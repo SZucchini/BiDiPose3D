@@ -6,7 +6,7 @@ from pytorch_lightning.loggers import WandbLogger
 from bidipose.datasets.datamodule import StereoCameraDataModule
 import bidipose.models as models
 from bidipose.diffusion.sampler import DiffusionSampler
-from bidipose.train.module import DiffusionLightningModule
+from bidipose.diffusion.module import DiffusionLightningModule
 
 @hydra.main(config_path=None, config_name=None)
 def main(cfg: DictConfig) -> None:

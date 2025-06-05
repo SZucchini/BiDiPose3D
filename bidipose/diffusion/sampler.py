@@ -4,7 +4,6 @@ from typing import Optional, Tuple
 import torch.nn as nn
 
 import bidipose.diffusion.scheduler as scheduler
-from bidipose.diffusion.scheduler import beta_to_alpha
 
 class DiffusionSampler:
     """
