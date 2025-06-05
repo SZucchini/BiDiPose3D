@@ -1,13 +1,9 @@
 """Test for the pose models."""
 
-from functools import partial
-
 import torch
-import torch.nn as nn
 
 from bidipose.models.MotionAGFormer.model import MotionAGFormer
 from bidipose.diffusion.sampler import DDPMSampler
-from bidipose.diffusion.scheduler import linear_beta_schedule
 
 
 def test_sampler():
@@ -44,8 +40,8 @@ def test_sampler():
     trans_mask = torch.randint(0, 2, trans.shape, dtype=torch.bool)
     x_recon_masked, quat_recon_masked, trans_recon_masked = sampler.p_sample(
         model, x_noise, quat_noise, trans_noise, 100,
+        x_init=x, quat_init=quat, trans_init=trans,
         x_mask=x_mask, quat_mask=quat_mask, trans_mask=trans_mask,
-        x_init=x, quat_init=quat, trans_init=trans
     )
     assert x_recon_masked.shape == x.shape
     assert quat_recon_masked.shape == quat.shape
@@ -63,8 +59,8 @@ def test_sampler():
     trans_mask = torch.randint(0, 2, trans.shape, dtype=torch.bool)
     x_sample_masked, quat_sample_masked, trans_sample_masked = sampler.sample(
         model, x.shape, quat.shape, trans.shape,
+        x_init=x, quat_init=quat, trans_init=trans,
         x_mask=x_mask, quat_mask=quat_mask, trans_mask=trans_mask,
-        x_init=x, quat_init=quat, trans_init=trans
     )
     assert x_sample_masked.shape == x.shape
     assert quat_sample_masked.shape == quat.shape

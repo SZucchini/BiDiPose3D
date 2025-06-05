@@ -46,12 +46,12 @@ class DDPMSampler:
         x_shape: Tuple[int, ...],
         quat_shape: Tuple[int, ...],
         trans_shape: Tuple[int, ...],
-        x_mask: Optional[torch.Tensor] = None,
-        quat_mask: Optional[torch.Tensor] = None,
-        trans_mask: Optional[torch.Tensor] = None,
         x_init: Optional[torch.Tensor] = None,
         quat_init: Optional[torch.Tensor] = None,
         trans_init: Optional[torch.Tensor] = None,
+        x_mask: Optional[torch.Tensor] = None,
+        quat_mask: Optional[torch.Tensor] = None,
+        trans_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Generate samples from the diffusion model, supporting mask inpainting.
@@ -84,12 +84,12 @@ class DDPMSampler:
                 quat,
                 trans,
                 t,
-                x_mask,
-                quat_mask,
-                trans_mask,
-                x_init,
-                quat_init,
-                trans_init
+                x_init=x_init,
+                quat_init=quat_init,
+                trans_init=trans_init,
+                x_mask=x_mask,
+                quat_mask=quat_mask,
+                trans_mask=trans_mask,
             )
         return x, quat, trans
     
@@ -193,12 +193,12 @@ class DDPMSampler:
         quat: torch.Tensor,
         trans: torch.Tensor,
         t: int,
-        x_mask: Optional[torch.Tensor] = None,
-        quat_mask: Optional[torch.Tensor] = None,
-        trans_mask: Optional[torch.Tensor] = None,
         x_init: Optional[torch.Tensor] = None,
         quat_init: Optional[torch.Tensor] = None,
         trans_init: Optional[torch.Tensor] = None,
+        x_mask: Optional[torch.Tensor] = None,
+        quat_mask: Optional[torch.Tensor] = None,
+        trans_mask: Optional[torch.Tensor] = None, 
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Perform one reverse diffusion step, supporting mask inpainting.
