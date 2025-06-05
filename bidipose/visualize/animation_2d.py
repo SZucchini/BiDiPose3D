@@ -47,7 +47,6 @@ def vis_pose2d(
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
     fig.suptitle(title)
 
-    print(pred_pose.shape)
     pred_view1 = pred_pose[:, :, :2]
     pred_view2 = pred_pose[:, :, 3:5]
     xmin = min(np.min(pred_view1[:, :, 0]), np.min(pred_view2[:, :, 0])) - 0.15
@@ -75,7 +74,7 @@ def vis_pose2d(
         ax.clear()
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
-        ax.invert_yaxis()
+        # ax.invert_yaxis()
 
         if gt is not None:
             ax.plot(gt[:, 0], gt[:, 1], "k.", label="GT", markersize=5, alpha=0.5)

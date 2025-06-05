@@ -83,25 +83,23 @@ def vis_pose3d(
             zmax = np.max(pred_pose3d[:, 2]) + 0.2
         ax.clear()
         ax.set_title(title)
-        ax.view_init(elev=10, azim=0)
-        ax.set_xlim(zmin, zmax)
-        ax.set_ylim(xmin, xmax)
-        ax.set_zlim(ymin, ymax)
-        ax.set_xlabel("Z")
-        ax.set_ylabel("X")
-        ax.set_zlabel("Y")
-        ax.invert_xaxis()
-        ax.invert_zaxis()
+        ax.view_init(elev=-90, azim=0)
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(ymin, ymax)
+        ax.set_zlim(zmin, zmax)
+        ax.set_xlabel("X")
+        ax.set_ylabel("Y")
+        ax.set_zlabel("Z")
 
         if gt_pose3d is not None:
-            gt_x0, gt_y0, gt_z0 = gt_pose3d[:, 2], gt_pose3d[:, 0], gt_pose3d[:, 1]
+            gt_x0, gt_y0, gt_z0 = gt_pose3d[:, 0], gt_pose3d[:, 1], gt_pose3d[:, 2]
             ax.plot(gt_x0, gt_y0, gt_z0, "k.", label="GT", markersize=10, alpha=0.5)
             x_bone_gt, y_bone_gt, z_bone_gt = set_lines(gt_x0, gt_y0, gt_z0, h36m_bones)
             for x, y, z in zip(x_bone_gt, y_bone_gt, z_bone_gt, strict=False):
                 line = art3d.Line3D(x, y, z, color="black", linewidth=4)
                 ax.add_line(line)
 
-        pred_x0, pred_y0, pred_z0 = pred_pose3d[:, 2], pred_pose3d[:, 0], pred_pose3d[:, 1]
+        pred_x0, pred_y0, pred_z0 = pred_pose3d[:, 0], pred_pose3d[:, 1], pred_pose3d[:, 2]
         ax.plot(pred_x0, pred_y0, pred_z0, "r.", label="Pred", markersize=10, alpha=0.8)
         x_bone_pred, y_bone_pred, z_bone_pred = set_lines(pred_x0, pred_y0, pred_z0, h36m_bones)
         for x, y, z in zip(x_bone_pred, y_bone_pred, z_bone_pred, strict=False):
