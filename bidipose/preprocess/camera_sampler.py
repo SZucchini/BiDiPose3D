@@ -105,63 +105,74 @@ class StereoCameraSampler:
             tuple[np.ndarray, np.ndarray]: Camera positions (shape (2, 3)) and target positions (shape (2, 3)).
 
         """
-        pts = np.asarray(kpts_world, np.float64).reshape(-1, 3)
-        min_xyz, max_xyz = pts.min(0), pts.max(0)
-        centre = 0.5 * (min_xyz + max_xyz)
-        radius = np.linalg.norm(pts - centre, axis=1).max()
+        max_retry = 1000
+        for retry_count in range(max_retry):
+            try:
+                pts = np.asarray(kpts_world, np.float64).reshape(-1, 3)
+                min_xyz, max_xyz = pts.min(0), pts.max(0)
+                centre = 0.5 * (min_xyz + max_xyz)
+                radius = np.linalg.norm(pts - centre, axis=1).max()
 
-        self.img_size = self.rng.choice(self.img_size_options)
-        width, height = self.img_size
-        aspect = width / height
+                self.img_size = self.rng.choice(self.img_size_options)
+                width, height = self.img_size
+                aspect = width / height
 
-        fov_deg = self.rng.uniform(*self.fov_range_deg)
-        fov_rad = np.deg2rad(fov_deg)
-        h_fov_rad = fov_rad  # consider horizontal fov
-        v_fov_rad = 2 * np.arctan(np.tan(h_fov_rad / 2) / aspect)
-        self.intrinsics = np.stack([self._sample_intrinsics(self.img_size, h_fov_rad) for _ in range(2)])
+                fov_deg = self.rng.uniform(*self.fov_range_deg)
+                fov_rad = np.deg2rad(fov_deg)
+                h_fov_rad = fov_rad  # consider horizontal fov
+                v_fov_rad = 2 * np.arctan(np.tan(h_fov_rad / 2) / aspect)
+                self.intrinsics = np.stack([self._sample_intrinsics(self.img_size, h_fov_rad) for _ in range(2)])
 
-        min_fov_rad = min(h_fov_rad, v_fov_rad)
-        d_min = radius / np.tan(min_fov_rad / 2)
-        d_max = d_min * self.distance_factor
-        cam_distance = self.rng.uniform(d_min, d_max, size=(2, 1))
+                min_fov_rad = min(h_fov_rad, v_fov_rad)
+                d_min = radius / np.tan(min_fov_rad / 2)
+                d_max = d_min * self.distance_factor
+                cam_distance = self.rng.uniform(d_min, d_max, size=(2, 1))
 
-        ang_min_rad = np.deg2rad(self.baseline_angle_range[0])
-        ang_max_rad = np.deg2rad(self.baseline_angle_range[1])
-        theta_min = np.deg2rad(self.min_polar_angle_deg)
-        cos_theta_max = np.cos(theta_min)
+                ang_min_rad = np.deg2rad(self.baseline_angle_range[0])
+                ang_max_rad = np.deg2rad(self.baseline_angle_range[1])
+                theta_min = np.deg2rad(self.min_polar_angle_deg)
+                cos_theta_max = np.cos(theta_min)
 
-        for _ in range(self.max_iter):
-            dirs = []
-            for _ in range(2):
-                phi = self.rng.uniform(0.0, 2.0 * np.pi)
-                cos_theta = self.rng.uniform(0.0, cos_theta_max)
-                sin_theta = np.sqrt(1.0 - cos_theta**2)
-                dirs.append([sin_theta * np.cos(phi), sin_theta * np.sin(phi), cos_theta])
-            dirs = np.asarray(dirs)
+                for _ in range(self.max_iter):
+                    dirs = []
+                    for _ in range(2):
+                        phi = self.rng.uniform(0.0, 2.0 * np.pi)
+                        cos_theta = self.rng.uniform(0.0, cos_theta_max)
+                        sin_theta = np.sqrt(1.0 - cos_theta**2)
+                        dirs.append([sin_theta * np.cos(phi), sin_theta * np.sin(phi), cos_theta])
+                    dirs = np.asarray(dirs)
 
-            dot = np.clip(np.dot(dirs[0], dirs[1]), -1.0, 1.0)
-            angle = np.arccos(dot)
-            if not (ang_min_rad <= angle <= ang_max_rad):
-                continue
+                    dot = np.clip(np.dot(dirs[0], dirs[1]), -1.0, 1.0)
+                    angle = np.arccos(dot)
+                    if not (ang_min_rad <= angle <= ang_max_rad):
+                        continue
 
-            cam_pos = centre + cam_distance * dirs
-            baseline = np.linalg.norm(cam_pos[0] - cam_pos[1])
-            height_tol = self.height_tol_ratio * baseline
-            height_diff = abs(cam_pos[0, 2] - cam_pos[1, 2])
-            if height_diff > height_tol:
-                continue
+                    cam_pos = centre + cam_distance * dirs
+                    baseline = np.linalg.norm(cam_pos[0] - cam_pos[1])
+                    height_tol = self.height_tol_ratio * baseline
+                    height_diff = abs(cam_pos[0, 2] - cam_pos[1, 2])
+                    if height_diff > height_tol:
+                        continue
 
-            tgt_dirs = self.rng.normal(0.0, 1.0, size=(2, 3))
-            tgt_dirs /= np.linalg.norm(tgt_dirs, axis=1, keepdims=True)
-            tgt_dists = self.rng.uniform(0.0, radius, size=(2, 1))
-            tgt_pos = centre + tgt_dirs * tgt_dists
+                    tgt_dirs = self.rng.normal(0.0, 1.0, size=(2, 3))
+                    tgt_dirs /= np.linalg.norm(tgt_dirs, axis=1, keepdims=True)
+                    tgt_dists = self.rng.uniform(0.0, radius, size=(2, 1))
+                    tgt_pos = centre + tgt_dirs * tgt_dists
 
-            if not self._check_is_inside_image(kpts_world, cam_pos, tgt_pos):
-                continue
+                    if not self._check_is_inside_image(kpts_world, cam_pos, tgt_pos):
+                        continue
 
-            return cam_pos.astype(np.float32), tgt_pos.astype(np.float32)
+                    return cam_pos.astype(np.float32), tgt_pos.astype(np.float32)
 
-        raise RuntimeError("Failed to sample camera and target positions within the maximum number of iterations.")
+            except Exception as e:
+                if retry_count == max_retry - 1:
+                    raise RuntimeError(
+                        f"Failed to sample camera and target positions after {max_retry} retry attempts. Last error: {str(e)}"
+                    )
+
+        raise RuntimeError(
+            f"Failed to sample camera and target positions within the maximum number of iterations ({self.max_iter}) after {max_retry} retry attempts."
+        )
 
     def _rot_to_quat(self, rot: np.ndarray) -> np.ndarray:
         """Convert rotation matrix to quaternion.
