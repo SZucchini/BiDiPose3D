@@ -2,6 +2,24 @@ from typing import Tuple
 import torch
 import math
 
+def beta_to_alpha(
+    betas: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Convert beta values to alpha and cumulative alpha values.
+
+    Args:
+        betas (torch.Tensor): Tensor of beta values.
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: Tuple containing:
+            - alphas (torch.Tensor): 1 - betas.
+            - alphas_cumprod (torch.Tensor): Cumulative product of alphas.
+    """
+    alphas = 1.0 - betas
+    alphas_cumprod = torch.cumprod(alphas, dim=0)
+    return alphas, alphas_cumprod
+
 def linear_beta_schedule(
     timesteps: int, beta_start: float = 1e-4, beta_end: float = 0.02
 ) -> torch.Tensor:
