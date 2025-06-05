@@ -5,9 +5,38 @@ from pytorch_lightning.loggers import WandbLogger
 
 from bidipose.datasets.datamodule import StereoCameraDataModule
 import bidipose.models as models
-from bidipose.diffusion.sampler import DiffusionSampler
+from bidipose.diffusion.sampler import DDPMSampler
 from bidipose.diffusion.module import DiffusionLightningModule
 
+# Here is an example directory structure for storing Hydra configuration files.
+# Typically, you create a `configs` directory at the project root and place various config files inside.
+
+# Example directory structure:
+# configs/
+# ├── config.yaml                # Main configuration file
+# ├── data/
+# │   └── data.yaml              # Dataset-related configuration
+# ├── model/
+# │   └── model.yaml             # Model-related configuration
+# ├── sampler/
+# │   └── sampler.yaml           # Sampler-related configuration
+# ├── module/
+# │   └── module.yaml            # LightningModule-related configuration
+# ├── logger/
+# │   └── logger.yaml            # Logger-related configuration
+# └── trainer/
+#     └── trainer.yaml           # Trainer-related configuration
+
+# Example config.yaml:
+# defaults:
+#   - data: data
+#   - model: model
+#   - sampler: sampler
+#   - module: module
+#   - logger: logger
+#   - trainer: trainer
+
+# You define detailed parameters in each subdirectory's yaml file.
 @hydra.main(config_path=None, config_name=None)
 def main(cfg: DictConfig) -> None:
     """
@@ -28,7 +57,7 @@ def main(cfg: DictConfig) -> None:
     model = getattr(models, cfg.model.name)(**cfg.model.params)
 
     # Sampler
-    sampler = DiffusionSampler(
+    sampler = DDPMSampler(
         beta_scheduler_name=cfg.sampler.beta_scheduler_name,
         beta_scheduler_params=cfg.sampler.beta_scheduler_params,
         device=cfg.sampler.device
@@ -38,8 +67,7 @@ def main(cfg: DictConfig) -> None:
     module = DiffusionLightningModule(
         model=model,
         sampler=sampler,
-        optimizer_name=cfg.trainer.optimizer_name,
-        optimizer_params=cfg.trainer.optimizer_params,
+        **cfg.module
     )
 
     # WandbLogger

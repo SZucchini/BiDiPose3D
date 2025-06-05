@@ -6,14 +6,14 @@ import torch
 import torch.nn as nn
 
 from bidipose.models.MotionAGFormer.model import MotionAGFormer
-from bidipose.diffusion.sampler import DiffusionSampler
+from bidipose.diffusion.sampler import DDPMSampler
 from bidipose.diffusion.scheduler import linear_beta_schedule
 
 
 def test_sampler():
-    """Test the DiffusionSampler."""
+    """Test the DDPMSampler."""
     timesteps = 1000
-    sampler = DiffusionSampler(
+    sampler = DDPMSampler(
         beta_scheduler_name='linear_beta_schedule',
         beta_scheduler_params={'timesteps': timesteps},
         device=torch.device('cpu')

@@ -5,7 +5,7 @@ from typing import Any, List, Tuple
 import torch.nn as nn
 import torch.optim as optim
 
-from bidipose.diffusion.sampler import DiffusionSampler
+from bidipose.diffusion.sampler import DDPMSampler
 from bidipose.models.base import BaseModel
 from bidipose.diffusion.utils import get_spatial_mask, get_temporal_mask, get_camera_mask
 
@@ -22,7 +22,7 @@ class DiffusionLightningModule(pl.LightningModule):
     def __init__(
         self,
         model: BaseModel,
-        sampler: DiffusionSampler,
+        sampler: DDPMSampler,
         optimizer_name: str,
         optimizer_params: dict,
         num_validation_batches_to_sample: int = 5,
@@ -306,3 +306,4 @@ class DiffusionLightningModule(pl.LightningModule):
             **self.optimizer_params
         )
         return optimizer
+    

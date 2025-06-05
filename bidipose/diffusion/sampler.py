@@ -5,9 +5,9 @@ import torch.nn as nn
 
 import bidipose.diffusion.scheduler as scheduler
 
-class DiffusionSampler:
+class DDPMSampler:
     """
-    DiffusionSampler performs sampling from a diffusion model, supporting mask inpainting.
+    DDPMSampler performs sampling from a diffusion model, supporting mask inpainting.
 
     Args:
         betas (torch.Tensor): Beta values for the noise schedule (1D tensor).
@@ -28,7 +28,7 @@ class DiffusionSampler:
         device: Optional[torch.device] = None
     ) -> None:
         """
-        Initialize DiffusionSampler.
+        Initialize DDPMSampler.
 
         Args:
             betas (torch.Tensor): Beta values for the noise schedule (1D tensor).
