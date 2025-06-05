@@ -12,16 +12,19 @@ from bidipose.diffusion.scheduler import linear_beta_schedule
 
 def test_sampler():
     """Test the DiffusionSampler."""
-    num_steps = 1000
-    betas = linear_beta_schedule(num_steps)
-    sampler = DiffusionSampler(betas, device=torch.device('cpu'))
-    model = MotionAGFormer(n_layers=2, dim_feat=32, dim_in=4, n_frames=88)
+    timesteps = 1000
+    sampler = DiffusionSampler(
+        beta_scheduler_name='linear_beta_schedule',
+        beta_scheduler_params={'timesteps': timesteps},
+        device=torch.device('cpu')
+    )
+    model = MotionAGFormer(n_layers=2, dim_feat=32, dim_in=6, n_frames=88)
     model.eval()
 
-    x = torch.randn(1, 81, 17, 4)
+    x = torch.randn(1, 81, 17, 6)
     quat = torch.randn(1, 4, 1)
     trans = torch.randn(1, 3, 1)
-    t = torch.randint(0, num_steps, (1,), device=x.device)
+    t = torch.randint(0, timesteps, (1,), device=x.device)
 
     # Test forward process
     x_noise, quat_noise, trans_noise = sampler.q_sample(x, quat, trans, t)

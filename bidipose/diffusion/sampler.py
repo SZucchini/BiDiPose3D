@@ -3,6 +3,7 @@ from typing import Optional, Tuple
 
 import torch.nn as nn
 
+import bidipose.diffusion.scheduler as scheduler
 from bidipose.diffusion.scheduler import beta_to_alpha
 
 class DiffusionSampler:
@@ -14,7 +15,7 @@ class DiffusionSampler:
         device (Optional[torch.device]): Device for computation.
 
     Attributes:
-        num_steps (int): Number of diffusion steps.
+        timesteps (int): Number of diffusion steps.
         betas (torch.Tensor): Noise schedule.
         alphas (torch.Tensor): 1 - betas.
         alphas_cumprod (torch.Tensor): Cumulative product of alphas.
@@ -23,7 +24,8 @@ class DiffusionSampler:
 
     def __init__(
         self,
-        betas: torch.Tensor,
+        beta_scheduler_name: str,
+        beta_scheduler_params: dict,
         device: Optional[torch.device] = None
     ) -> None:
         """
@@ -33,10 +35,10 @@ class DiffusionSampler:
             betas (torch.Tensor): Beta values for the noise schedule (1D tensor).
             device (Optional[torch.device]): Device for computation.
         """
-        self.betas = betas.to(device) if device is not None else betas
-        self.num_steps = self.betas.shape[0]
         self.device = device if device is not None else torch.device('cpu')
-        self.alphas, self.alphas_cumprod = beta_to_alpha(self.betas)
+        self.betas = getattr(scheduler, beta_scheduler_name)(**beta_scheduler_params).to(self.device)
+        self.alphas, self.alphas_cumprod = scheduler.beta_to_alpha(self.betas)
+        self.timesteps = self.betas.shape[0]
 
     @torch.no_grad()
     def sample(
@@ -76,7 +78,7 @@ class DiffusionSampler:
         quat = torch.randn(quat_shape, device=self.device)
         trans = torch.randn(trans_shape, device=self.device)
 
-        for t in reversed(range(self.num_steps)):
+        for t in reversed(range(self.timesteps)):
             x, quat, trans = self.p_sample(
                 model,
                 x,
@@ -175,7 +177,7 @@ class DiffusionSampler:
         """
         if mask is not None and x_init is not None:
             if t > 0:
-                x_dummy = self._q_sample(x, torch.full((x.size(0),), t-1, device=self.device))
+                x_dummy = self._q_sample(x, torch.full((x.size(0),), t-1, device=x.device))
             else:
                 x_dummy = x_init
             # For masked inpainting, keep known regions from x_init
