@@ -1,0 +1,7 @@
+defaults:
+  - data: stereocamera
+  - model: motion_ag_forner
+  - sampler: ddpm_linear
+  - module: diffusion
+  - logger: wandb
+  - trainer: trainer

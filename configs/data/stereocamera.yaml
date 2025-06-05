@@ -1,0 +1,4 @@
+data_root: /path/to/dataset
+data_name: H36M
+batch_size: 32
+num_workers: 4

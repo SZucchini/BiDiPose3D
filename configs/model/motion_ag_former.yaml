@@ -1,0 +1,26 @@
+name: MotionAGFormer
+params:
+  n_layers: 2
+  dim_feat: 32
+  dim_in: 6
+  dim_rep: 512
+  dim_out: 6
+  mlp_ratio: 4
+  act_layer: nn.GELU
+  attn_drop: 0.0
+  drop: 0.0
+  drop_path: 0.0
+  use_layer_scale: true
+  layer_scale_init_value: 1e-5
+  use_adaptive_fusion: true
+  num_heads: 4
+  qkv_bias: false
+  qkv_scale: null
+  hierarchical: false
+  num_joints: 17
+  use_temporal_similarity: true
+  temporal_connection_len: 1
+  use_tcn: false
+  graph_only: false
+  neighbour_num: 4
+  n_frames: 88

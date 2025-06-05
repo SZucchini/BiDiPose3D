@@ -1,0 +1,6 @@
+beta_scheduler_name: linear_beta_schedule
+beta_scheduler_params:
+  timesteps: 1000
+  beta_start: 0.0001
+  beta_end: 0.02
+device: cuda
