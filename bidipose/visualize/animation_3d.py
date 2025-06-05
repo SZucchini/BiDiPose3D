@@ -67,12 +67,26 @@ def vis_pose3d(
 
     def draw_skeleton(ax: plt.Axes, pred_pose3d: np.ndarray, gt_pose3d: np.ndarray | None = None) -> None:
         """Draw skeleton."""
+        if gt_pose3d is not None:
+            xmin = gt_pose3d[0, 0] - 0.2
+            xmax = gt_pose3d[0, 0] + 0.2
+            ymin = gt_pose3d[0, 1] - 0.2
+            ymax = gt_pose3d[0, 1] + 0.2
+            zmin = gt_pose3d[0, 2] - 0.2
+            zmax = gt_pose3d[0, 2] + 0.2
+        else:
+            xmin = pred_pose3d[0, 0] - 0.2
+            xmax = pred_pose3d[0, 0] + 0.2
+            ymin = pred_pose3d[0, 1] - 0.2
+            ymax = pred_pose3d[0, 1] + 0.2
+            zmin = pred_pose3d[0, 2] - 0.2
+            zmax = pred_pose3d[0, 2] + 0.2
         ax.clear()
         ax.set_title(title)
         ax.view_init(elev=100, azim=90)
-        ax.set_xlim(pred_pose3d[0, 0] - 0.2, pred_pose3d[0, 0] + 0.2)
-        ax.set_ylim(pred_pose3d[0, 1] - 0.2, pred_pose3d[0, 1] + 0.2)
-        ax.set_zlim(pred_pose3d[0, 2] - 0.2, pred_pose3d[0, 2] + 0.2)
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(ymin, ymax)
+        ax.set_zlim(zmin, zmax)
         ax.set_xlabel("X")
         ax.set_ylabel("Y")
         ax.set_zlabel("Z")
