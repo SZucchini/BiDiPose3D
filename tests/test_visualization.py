@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from bidipose.datasets.dataset import StereoCameraDataset
+from bidipose.visualize.animation_2d import vis_pose2d
 from bidipose.visualize.animation_3d import vis_pose3d
 
 
@@ -14,6 +15,20 @@ def stereo_camera_dataset():
     return StereoCameraDataset(data_root=data_root, data_name="H36M", split="test")
 
 
+def test_vis_pose2d(stereo_camera_dataset):
+    """Test the 2D pose visualization."""
+    # Get a sample from the dataset
+    pose, _, _ = stereo_camera_dataset[1]
+    pose = np.array(pose)
+    noise = 0.001
+    pred_pose = pose + noise
+    anim = vis_pose2d(
+        pred_pose=pred_pose,
+        gt_pose=pose,
+    )
+    anim.save("tests/outputs/test_2d_pose.gif", writer="ffmpeg", fps=30)
+
+
 def test_vis_pose3d(stereo_camera_dataset):
     """Test the 3D pose visualization."""
     # Get a sample from the dataset
@@ -21,7 +36,7 @@ def test_vis_pose3d(stereo_camera_dataset):
     pose = np.array(pose)
     quat = np.array(quat).squeeze(-1)
     trans = np.array(trans).squeeze(-1)
-    noise = 0.005
+    noise = 0.01
     pred_pose = pose + noise
     pred_pose[:, 0, :] = pose[:, 0, :]
     anim = vis_pose3d(

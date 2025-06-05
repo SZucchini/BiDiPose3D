@@ -68,46 +68,45 @@ def vis_pose3d(
     def draw_skeleton(ax: plt.Axes, pred_pose3d: np.ndarray, gt_pose3d: np.ndarray | None = None) -> None:
         """Draw skeleton."""
         if gt_pose3d is not None:
-            xmin = gt_pose3d[0, 0] - 0.2
-            xmax = gt_pose3d[0, 0] + 0.2
-            ymin = gt_pose3d[0, 1] - 0.2
-            ymax = gt_pose3d[0, 1] + 0.2
-            zmin = gt_pose3d[0, 2] - 0.2
-            zmax = gt_pose3d[0, 2] + 0.2
+            xmin = np.min(gt_pose3d[:, 0]) - 0.1
+            xmax = np.max(gt_pose3d[:, 0]) + 0.1
+            ymin = np.min(gt_pose3d[:, 1]) - 0.1
+            ymax = np.max(gt_pose3d[:, 1]) + 0.1
+            zmin = np.min(gt_pose3d[:, 2]) - 0.1
+            zmax = np.max(gt_pose3d[:, 2]) + 0.1
         else:
-            xmin = pred_pose3d[0, 0] - 0.2
-            xmax = pred_pose3d[0, 0] + 0.2
-            ymin = pred_pose3d[0, 1] - 0.2
-            ymax = pred_pose3d[0, 1] + 0.2
-            zmin = pred_pose3d[0, 2] - 0.2
-            zmax = pred_pose3d[0, 2] + 0.2
+            xmin = np.min(pred_pose3d[:, 0]) - 0.1
+            xmax = np.max(pred_pose3d[:, 0]) + 0.2
+            ymin = np.min(pred_pose3d[:, 1]) - 0.2
+            ymax = np.max(pred_pose3d[:, 1]) + 0.2
+            zmin = np.min(pred_pose3d[:, 2]) - 0.2
+            zmax = np.max(pred_pose3d[:, 2]) + 0.2
         ax.clear()
         ax.set_title(title)
-        ax.view_init(elev=100, azim=90)
-        ax.set_xlim(xmin, xmax)
-        ax.set_ylim(ymin, ymax)
-        ax.set_zlim(zmin, zmax)
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
-        ax.set_zlabel("Z")
+        ax.view_init(elev=10, azim=0)
+        ax.set_xlim(zmin, zmax)
+        ax.set_ylim(xmin, xmax)
+        ax.set_zlim(ymin, ymax)
+        ax.set_xlabel("Z")
+        ax.set_ylabel("X")
+        ax.set_zlabel("Y")
+        ax.invert_xaxis()
+        ax.invert_zaxis()
 
         if gt_pose3d is not None:
-            gt_x0, gt_y0, gt_z0 = gt_pose3d[:, 0], gt_pose3d[:, 1], gt_pose3d[:, 2]
+            gt_x0, gt_y0, gt_z0 = gt_pose3d[:, 2], gt_pose3d[:, 0], gt_pose3d[:, 1]
             ax.plot(gt_x0, gt_y0, gt_z0, "k.", label="GT", markersize=10, alpha=0.5)
             x_bone_gt, y_bone_gt, z_bone_gt = set_lines(gt_x0, gt_y0, gt_z0, h36m_bones)
             for x, y, z in zip(x_bone_gt, y_bone_gt, z_bone_gt, strict=False):
                 line = art3d.Line3D(x, y, z, color="black", linewidth=4)
                 ax.add_line(line)
 
-        pred_x0, pred_y0, pred_z0 = pred_pose3d[:, 0], pred_pose3d[:, 1], pred_pose3d[:, 2]
+        pred_x0, pred_y0, pred_z0 = pred_pose3d[:, 2], pred_pose3d[:, 0], pred_pose3d[:, 1]
         ax.plot(pred_x0, pred_y0, pred_z0, "r.", label="Pred", markersize=10, alpha=0.8)
         x_bone_pred, y_bone_pred, z_bone_pred = set_lines(pred_x0, pred_y0, pred_z0, h36m_bones)
         for x, y, z in zip(x_bone_pred, y_bone_pred, z_bone_pred, strict=False):
             line = art3d.Line3D(x, y, z, color="red", linewidth=4, alpha=0.8)
             ax.add_line(line)
-
-        ax.invert_xaxis()
-        ax.invert_zaxis()
 
     def update_frame(fc: int) -> None:
         """Update frame."""
