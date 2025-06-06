@@ -1,3 +1,1 @@
 project: bidipose
-name: train
-save_dir: exp

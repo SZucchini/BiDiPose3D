@@ -47,7 +47,7 @@ def main(cfg: DictConfig) -> None:
     """
     # DataModule
     datamodule = StereoCameraDataModule(
-        data_root=cfg.data.data_root,
+        data_root=cfg.local.data_root,
         data_name=cfg.data.data_name,
         batch_size=cfg.data.batch_size,
         num_workers=cfg.data.num_workers

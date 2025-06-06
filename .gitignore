@@ -178,3 +178,4 @@ cython_debug/
 
 # Experimental results
 exp/
+configs/local/local.yaml

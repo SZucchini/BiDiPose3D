@@ -2,10 +2,10 @@ optimizer_name: Adam
 optimizer_params:
   lr: 0.0002
   betas: [0.9, 0.999]
-num_validation_batches_to_sample: 5
-num_validation_batches_to_inpaint: 5
-num_plot_sample: 5
-num_plot_inpaint: 5
+num_validation_batches_to_sample: 10
+num_validation_batches_to_inpaint: 10
+num_plot_sample: 3
+num_plot_inpaint: 3
 inpinting_spatial_index: null
-inpainting_temporal_interval: null
-inpainting_camera_index: null
+inpainting_temporal_interval: [22, 66]
+inpainting_camera_index: 0

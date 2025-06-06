@@ -5,9 +5,16 @@ defaults:
   - module: diffusion
   - logger: wandb
   - trainer: trainer
+  - local: local
+
+exp_name: my_experiment # Need to override this in the command line
+base_dir: exp/${exp_name}
 
 hydra:
   run:
-    dir: exp
-  job:
-    chdir: False
+    dir: ${base_dir}
+  output_subdir: .hydra
+
+logger:
+  name: ${exp_name}
+  save_dir: ${base_dir}
