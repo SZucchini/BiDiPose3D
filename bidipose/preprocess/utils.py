@@ -134,3 +134,129 @@ def split_clips(
             clip_start += stride
 
     return clips
+
+
+def quat_to_rot_batch(quat: np.ndarray) -> np.ndarray:
+    """Convert quaternion to rotation matrix.
+
+    Args:
+        quat (np.ndarray or torch.Tensor): Quaternion of shape (B, 4).
+
+    Returns:
+        rot (np.ndarray): Rotation matrix of shape (B, 3, 3).
+
+    """
+    if quat.ndim == 3 and quat.shape[-1] == 1:
+        quat = quat.squeeze(-1)
+    w = quat[:, 0]
+    x = quat[:, 1]
+    y = quat[:, 2]
+    z = quat[:, 3]
+
+    rot = np.zeros((quat.shape[0], 3, 3), dtype=float)
+
+    rot[:, 0, 0] = 1 - 2 * (y * y + z * z)
+    rot[:, 0, 1] = 2 * (x * y - z * w)
+    rot[:, 0, 2] = 2 * (x * z + y * w)
+
+    rot[:, 1, 0] = 2 * (x * y + z * w)
+    rot[:, 1, 1] = 1 - 2 * (x * x + z * z)
+    rot[:, 1, 2] = 2 * (y * z - x * w)
+
+    rot[:, 2, 0] = 2 * (x * z - y * w)
+    rot[:, 2, 1] = 2 * (y * z + x * w)
+    rot[:, 2, 2] = 1 - 2 * (x * x + y * y)
+
+    return rot
+
+
+def essential_from_quat_and_trans_batch(quat: np.ndarray, trans: np.ndarray) -> np.ndarray:
+    """Compute the essential matrix from quaternion and translation.
+
+    Args:
+        quat (np.ndarray): Quaternion of shape (B, 4).
+        trans (np.ndarray): Translation vector of shape (B, 3).
+
+    Returns:
+        e_mat (np.ndarray): Essential matrix of shape (B, 3, 3).
+
+    """
+    if trans.ndim == 3 and trans.shape[-1] == 1:
+        trans = trans.squeeze(-1)
+
+    rot = quat_to_rot_batch(quat)
+    tx = trans[:, 0]
+    ty = trans[:, 1]
+    tz = trans[:, 2]
+
+    batch_size = trans.shape[0]
+    t_skew = np.zeros((batch_size, 3, 3))
+    t_skew[:, 0, 1] = -tz
+    t_skew[:, 0, 2] = ty
+    t_skew[:, 1, 0] = tz
+    t_skew[:, 1, 2] = -tx
+    t_skew[:, 2, 0] = -ty
+    t_skew[:, 2, 1] = tx
+
+    e_mat = np.matmul(t_skew, rot)
+    return e_mat
+
+
+def quat_to_rot(quat: np.ndarray) -> np.ndarray:
+    """Convert quaternion to rotation matrix.
+
+    Args:
+        quat (np.ndarray): Quaternion of shape (4,).
+
+    Returns:
+        np.ndarray: Rotation matrix of shape (3, 3).
+
+    """
+    w, x, y, z = quat
+    return np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ],
+        float,
+    )
+
+
+def triangulate_points(
+    x1: np.ndarray,
+    x2: np.ndarray,
+    quat: np.ndarray,
+    trans: np.ndarray,
+) -> np.ndarray:
+    """Triangulate 3D points from two views using epipolar geometry.
+
+    Args:
+        x1 (np.ndarray): Normalized 2D points in the first view of shape (T, J, 3).
+        x2 (np.ndarray): Normalized 2D points in the second view of shape (T, J, 3).
+        quat (np.ndarray): Quaternion representing the rotation from the first view to the second view.
+            The shape is (4,).
+        trans (np.ndarray): Translation vector from the first view to the second view.
+            The shape is (3,).
+
+    Returns:
+        x3d (np.ndarray): Triangulated 3D points of shape (T, J, 3).
+
+    """
+    frames = x1.shape[0]
+    x1 = x1.reshape(-1, 3)
+    x2 = x2.reshape(-1, 3)
+    points = x1.shape[0]
+
+    rot = quat_to_rot(quat)
+    rot_x1 = x1.dot(rot.T)
+    a = np.cross(x2, rot_x1, axis=1)
+    b = -np.cross(x2, trans.reshape(1, 3), axis=1)
+
+    numerators = np.einsum("ij,ij->i", a, b)
+    denominators = np.einsum("ij,ij->i", a, a)
+
+    lambdas = numerators / denominators
+    x3d = lambdas.reshape(points, 1) * x1
+    x3d = x3d.reshape(frames, -1, 3)
+    return x3d
