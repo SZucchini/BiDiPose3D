@@ -6,6 +6,15 @@ num_validation_batches_to_sample: 10
 num_validation_batches_to_inpaint: 10
 num_plot_sample: 3
 num_plot_inpaint: 3
-inpinting_spatial_index: null
+inpinting_spatial_name:
+  - PELVIS
+  - R_HIP
+  - R_KNEE
+  - R_ANKLE
+  - L_HIP
+  - L_KNEE
+  - L_ANKLE
+  - SPINE
+  - THORAX
 inpainting_temporal_interval: [22, 66]
 inpainting_camera_index: 0

@@ -14,7 +14,7 @@ from bidipose.diffusion.utils import get_spatial_mask, get_temporal_mask, get_ca
 from bidipose.eval.metrics import epipolar_error, key_point_error_2d, camera_direction_error, camera_rotation_error
 from bidipose.visualize.animation_2d import vis_pose2d
 from bidipose.visualize.animation_3d import vis_pose3d
-
+from bidipose.statics.joints import h36m_joints_name_to_index
 
 class DiffusionLightningModule(pl.LightningModule):
     """
@@ -35,7 +35,7 @@ class DiffusionLightningModule(pl.LightningModule):
         num_validation_batches_to_inpaint: int = 10,
         num_plot_sample: int = 3,
         num_plot_inpaint: int = 3,
-        inpinting_spatial_index: List[int] = None,
+        inpinting_spatial_name: List[str] = None,
         inpainting_temporal_interval: Tuple[int, int] = None,
         inpainting_camera_index: int = None,
     ) -> None:
@@ -50,7 +50,9 @@ class DiffusionLightningModule(pl.LightningModule):
         self.num_plot_sample = num_plot_sample
         self.num_plot_inpaint = num_plot_inpaint
         self.validation_batches: List[Any] = []
-        self.inpinting_spatial_index = inpinting_spatial_index
+        self.inpinting_spatial_index = [
+            h36m_joints_name_to_index[name] for name in inpinting_spatial_name
+        ] if inpinting_spatial_name is not None else None
         self.inpainting_temporal_interval = inpainting_temporal_interval
         self.inpainting_camera_index = inpainting_camera_index
 
