@@ -370,6 +370,7 @@ class MotionAGFormer(BaseModel):
         self.pos_embed = nn.Parameter(torch.zeros(1, num_joints, dim_feat))
         self.type_embed = nn.Parameter(torch.zeros(3, 1, 1, dim_feat))
         self.norm = nn.LayerNorm(dim_feat)
+        act_layer = getattr(nn, act_layer) if isinstance(act_layer, str) else act_layer
 
         self.layers = create_layers(
             dim=dim_feat,

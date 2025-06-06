@@ -6,7 +6,7 @@ params:
   dim_rep: 512
   dim_out: 6
   mlp_ratio: 4
-  act_layer: nn.GELU
+  act_layer: GELU
   attn_drop: 0.0
   drop: 0.0
   drop_path: 0.0
