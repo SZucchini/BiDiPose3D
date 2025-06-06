@@ -1,5 +1,6 @@
 import torch
 from typing import Optional, Tuple
+from tqdm import tqdm
 
 import torch.nn as nn
 
@@ -77,7 +78,7 @@ class DDPMSampler:
         quat = torch.randn(quat_shape, device=self.device)
         trans = torch.randn(trans_shape, device=self.device)
 
-        for t in reversed(range(self.timesteps)):
+        for t in tqdm(reversed(range(self.timesteps)), desc="Sampling"):
             x, quat, trans = self.p_sample(
                 model,
                 x,
