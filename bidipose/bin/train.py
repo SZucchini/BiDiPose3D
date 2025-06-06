@@ -37,7 +37,7 @@ from bidipose.diffusion.module import DiffusionLightningModule
 #   - trainer: trainer
 
 # You define detailed parameters in each subdirectory's yaml file.
-@hydra.main(config_path=None, config_name=None)
+@hydra.main(config_path='../../configs', config_name='config')
 def main(cfg: DictConfig) -> None:
     """
     Main training routine using Hydra for hyperparameter management.

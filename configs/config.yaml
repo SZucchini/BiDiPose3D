@@ -1,7 +1,13 @@
 defaults:
   - data: stereocamera
-  - model: motion_ag_forner
+  - model: motion_ag_former
   - sampler: ddpm_linear
   - module: diffusion
   - logger: wandb
   - trainer: trainer
+
+hydra:
+  run:
+    dir: exp
+  job:
+    chdir: False
