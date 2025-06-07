@@ -275,13 +275,13 @@ class DiffusionLightningModule(pl.LightningModule):
         # Log the paths to the videos
         logging.info(f"Logging videos for key: {key1}/{key2} at epoch {self.current_epoch}")
         self.logger.log_video(
-            key=f"{key1}/2d_{key2}", 
+            key=f"{key1}/2d/{key2}", 
             videos=paths_2d, 
             step=self.current_epoch, 
             format=['mp4'] * len(paths_2d)
         )
         self.logger.log_video(
-            key=f"{key1}/3d_{key2}", 
+            key=f"{key1}/3d/{key2}", 
             videos=paths_3d, 
             step=self.current_epoch, 
             format=['mp4'] * len(paths_2d)
