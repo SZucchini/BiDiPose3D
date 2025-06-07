@@ -13,6 +13,8 @@ base_dir: exp/${exp_name}
 hydra:
   run:
     dir: ${base_dir}
+  job:
+    chdir: False
   output_subdir: .hydra
 
 logger:
