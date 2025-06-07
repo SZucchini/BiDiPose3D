@@ -24,8 +24,10 @@ from bidipose.diffusion.module import DiffusionLightningModule
 # │   └── module.yaml            # LightningModule-related configuration
 # ├── logger/
 # │   └── logger.yaml            # Logger-related configuration
-# └── trainer/
-#     └── trainer.yaml           # Trainer-related configuration
+# ├── trainer/
+# |   └── trainer.yaml           # Trainer-related configuration
+# └── local/
+#     └── local.yaml             # Local overrides for configuration
 
 # Example config.yaml:
 # defaults:
@@ -35,6 +37,7 @@ from bidipose.diffusion.module import DiffusionLightningModule
 #   - module: module
 #   - logger: logger
 #   - trainer: trainer
+#   - local: local
 
 # You define detailed parameters in each subdirectory's yaml file.
 @hydra.main(config_path='../../configs', config_name='config')
@@ -80,7 +83,7 @@ def main(cfg: DictConfig) -> None:
     # Trainer
     trainer = Trainer(
         logger=wandb_logger,
-        **cfg.trainer.trainer_params
+        **cfg.trainer
     )
 
     # Start training
