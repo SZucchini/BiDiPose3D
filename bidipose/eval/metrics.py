@@ -107,5 +107,5 @@ def camera_rotation_error(quat_pred: torch.Tensor, quat_gt: torch.Tensor) -> tor
     quat_pred_inv = _quaternion_conjugate(quat_pred)
     quat_rel = _quaternion_multiply(quat_pred_inv, quat_gt)
     quat_rel = torch.nn.functional.normalize(quat_rel, dim=1)
-    error_angle = quat_rel[0].clamp(-1, 1).arccos().mul(2)
+    error_angle = quat_rel[:,0].clamp(-1, 1).arccos().mul(2).add(torch.pi).remainder(2*torch.pi).sub(torch.pi)
     return error_angle.abs().mean()
