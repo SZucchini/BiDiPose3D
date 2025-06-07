@@ -2,6 +2,7 @@ import hydra
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import WandbLogger
+import pytorch_lightning as pl
 
 from bidipose.datasets.datamodule import StereoCameraDataModule
 import bidipose.models as models
@@ -48,6 +49,9 @@ def main(cfg: DictConfig) -> None:
     Args:
         cfg (DictConfig): Configuration composed by Hydra.
     """
+    # fix seed for reproducibility
+    pl.seed_everything(cfg.seed, workers=True)
+
     # DataModule
     datamodule = StereoCameraDataModule(
         data_root=cfg.local.data_root,

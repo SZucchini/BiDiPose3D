@@ -23,3 +23,5 @@ logger:
 
 trainer:
   default_root_dir: ${base_dir}
+
+seed: 42
