@@ -1,0 +1,17 @@
+optimizer_name: Adam
+optimizer_params:
+  lr: 0.0002
+  betas: [0.9, 0.999]
+num_validation_batches_to_sample: 2
+num_validation_batches_to_inpaint: 2
+num_plot_sample: 2
+num_plot_inpaint: 2
+inpinting_spatial_name:
+  - R_HIP
+  - R_KNEE
+  - R_ANKLE
+  - R_SHOULDER
+  - R_ELBOW
+  - R_WRIST
+inpainting_temporal_interval: [27, 54]
+inpainting_camera_index: 0

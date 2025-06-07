@@ -1,0 +1,3 @@
+project: bidipose
+name: null # Need to override this in the command line or in the config
+save_dir: null # Need to override this in the command line or in the config

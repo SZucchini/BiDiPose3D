@@ -384,6 +384,7 @@ class DSTformer(BaseModel):
         att_fuse=True,
     ):
         super().__init__()
+        norm_layer = getattr(nn, norm_layer) if isinstance(norm_layer, str) else norm_layer
         self.dim_out = dim_out
         self.dim_feat = dim_feat
         self.joints_embed = nn.Linear(dim_in, dim_feat)

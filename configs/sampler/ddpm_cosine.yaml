@@ -1,0 +1,5 @@
+beta_scheduler_name: cosine_beta_schedule
+beta_scheduler_params:
+  timesteps: 1000
+  s: 0.008
+device: cuda

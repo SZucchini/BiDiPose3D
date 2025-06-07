@@ -1,0 +1,31 @@
+defaults:
+  - data: stereocamera
+  - model: motion_ag_former
+  - sampler: ddpm_cosine
+  - module: diffusion
+  - logger: wandb
+  - checkpoint: checkpoint
+  - trainer: trainer
+  - local: local
+
+exp_name: my_experiment # Need to override this in the command line
+base_dir: exp/${exp_name}
+
+hydra:
+  run:
+    dir: ${base_dir}
+  job:
+    chdir: False
+  output_subdir: .hydra
+
+logger:
+  name: ${exp_name}
+  save_dir: ${base_dir}
+
+trainer:
+  default_root_dir: ${base_dir}
+
+checkpoint:
+  dirpath: ${base_dir}/checkpoints
+
+seed: 42

@@ -175,3 +175,7 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Experimental results
+exp/
+configs/local/local.yaml

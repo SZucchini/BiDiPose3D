@@ -1,20 +1,21 @@
 import torch
 from typing import Optional, Tuple
+from tqdm import tqdm
 
 import torch.nn as nn
 
-from bidipose.diffusion.scheduler import beta_to_alpha
+import bidipose.diffusion.scheduler as scheduler
 
-class DiffusionSampler:
+class DDPMSampler:
     """
-    DiffusionSampler performs sampling from a diffusion model, supporting mask inpainting.
+    DDPMSampler performs sampling from a diffusion model, supporting mask inpainting.
 
     Args:
         betas (torch.Tensor): Beta values for the noise schedule (1D tensor).
         device (Optional[torch.device]): Device for computation.
 
     Attributes:
-        num_steps (int): Number of diffusion steps.
+        timesteps (int): Number of diffusion steps.
         betas (torch.Tensor): Noise schedule.
         alphas (torch.Tensor): 1 - betas.
         alphas_cumprod (torch.Tensor): Cumulative product of alphas.
@@ -23,20 +24,21 @@ class DiffusionSampler:
 
     def __init__(
         self,
-        betas: torch.Tensor,
+        beta_scheduler_name: str,
+        beta_scheduler_params: dict,
         device: Optional[torch.device] = None
     ) -> None:
         """
-        Initialize DiffusionSampler.
+        Initialize DDPMSampler.
 
         Args:
             betas (torch.Tensor): Beta values for the noise schedule (1D tensor).
             device (Optional[torch.device]): Device for computation.
         """
-        self.betas = betas.to(device) if device is not None else betas
-        self.num_steps = self.betas.shape[0]
         self.device = device if device is not None else torch.device('cpu')
-        self.alphas, self.alphas_cumprod = beta_to_alpha(self.betas)
+        self.betas = getattr(scheduler, beta_scheduler_name)(**beta_scheduler_params).to(self.device)
+        self.alphas, self.alphas_cumprod = scheduler.beta_to_alpha(self.betas)
+        self.timesteps = self.betas.shape[0]
 
     @torch.no_grad()
     def sample(
@@ -45,12 +47,12 @@ class DiffusionSampler:
         x_shape: Tuple[int, ...],
         quat_shape: Tuple[int, ...],
         trans_shape: Tuple[int, ...],
-        x_mask: Optional[torch.Tensor] = None,
-        quat_mask: Optional[torch.Tensor] = None,
-        trans_mask: Optional[torch.Tensor] = None,
         x_init: Optional[torch.Tensor] = None,
         quat_init: Optional[torch.Tensor] = None,
         trans_init: Optional[torch.Tensor] = None,
+        x_mask: Optional[torch.Tensor] = None,
+        quat_mask: Optional[torch.Tensor] = None,
+        trans_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Generate samples from the diffusion model, supporting mask inpainting.
@@ -76,19 +78,19 @@ class DiffusionSampler:
         quat = torch.randn(quat_shape, device=self.device)
         trans = torch.randn(trans_shape, device=self.device)
 
-        for t in reversed(range(self.num_steps)):
+        for t in tqdm(reversed(range(self.timesteps)), desc="Sampling"):
             x, quat, trans = self.p_sample(
                 model,
                 x,
                 quat,
                 trans,
                 t,
-                x_mask,
-                quat_mask,
-                trans_mask,
-                x_init,
-                quat_init,
-                trans_init
+                x_init=x_init,
+                quat_init=quat_init,
+                trans_init=trans_init,
+                x_mask=x_mask,
+                quat_mask=quat_mask,
+                trans_mask=trans_mask,
             )
         return x, quat, trans
     
@@ -129,9 +131,9 @@ class DiffusionSampler:
             torch.Tensor: Noised quaternion data at timestep t.
             torch.Tensor: Noised translation data at timestep t.
         """
-        x = self._q_sample(x_start, t)
-        quat = self._q_sample(quat_start, t)
-        trans = self._q_sample(trans_start, t)
+        x = self._q_sample(x_start, t.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1))
+        quat = self._q_sample(quat_start, t.unsqueeze(-1).unsqueeze(-1))
+        trans = self._q_sample(trans_start, t.unsqueeze(-1).unsqueeze(-1))
         return x, quat, trans
     
     def _p_sample(self, x: torch.Tensor, x0_pred: torch.Tensor, t: int) -> torch.Tensor:
@@ -175,7 +177,8 @@ class DiffusionSampler:
         """
         if mask is not None and x_init is not None:
             if t > 0:
-                x_dummy = self._q_sample(x, torch.full((x.size(0),), t-1, device=self.device))
+                t_tensor = torch.full([x.size(0)] + [1] * (x.ndim - 1), t, device=x.device)
+                x_dummy = self._q_sample(x, t_tensor)
             else:
                 x_dummy = x_init
             # For masked inpainting, keep known regions from x_init
@@ -192,12 +195,12 @@ class DiffusionSampler:
         quat: torch.Tensor,
         trans: torch.Tensor,
         t: int,
-        x_mask: Optional[torch.Tensor] = None,
-        quat_mask: Optional[torch.Tensor] = None,
-        trans_mask: Optional[torch.Tensor] = None,
         x_init: Optional[torch.Tensor] = None,
         quat_init: Optional[torch.Tensor] = None,
         trans_init: Optional[torch.Tensor] = None,
+        x_mask: Optional[torch.Tensor] = None,
+        quat_mask: Optional[torch.Tensor] = None,
+        trans_mask: Optional[torch.Tensor] = None, 
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Perform one reverse diffusion step, supporting mask inpainting.

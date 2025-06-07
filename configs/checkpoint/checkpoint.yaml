@@ -1,0 +1,5 @@
+monitor: val/loss
+dirpath: null # Needs to be set in the main config
+filename: best_val_loss
+save_top_k: 5
+mode: min

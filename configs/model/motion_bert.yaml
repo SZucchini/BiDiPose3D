@@ -1,0 +1,18 @@
+name: DSTformer
+params:
+  dim_in: 6
+  dim_out: 6
+  dim_feat: 256
+  dim_rep: 512
+  depth: 5
+  num_heads: 8
+  mlp_ratio: 4
+  num_joints: 17
+  maxlen: 88
+  qkv_bias: true
+  qk_scale: null
+  drop_rate: 0.0
+  attn_drop_rate: 0.0
+  drop_path_rate: 0.0
+  norm_layer: LayerNorm
+  att_fuse: true
