@@ -241,7 +241,7 @@ class DiffusionLightningModule(pl.LightningModule):
         paths_2d = []
         paths_3d = []
         print(f"Saving animations for key: {key} at epoch {self.current_epoch}")
-        for i, s_x, s_quat, s_trans, s_x_gt, s_quat_gt, s_trans_gt in enumerate(zip(
+        for i, (s_x, s_quat, s_trans, s_x_gt, s_quat_gt, s_trans_gt) in enumerate(zip(
             x, quat, trans, x_gt, quat_gt, trans_gt
         )):
             print(f"Processing animation {i + 1}/{len(x)} for key: {key}")
