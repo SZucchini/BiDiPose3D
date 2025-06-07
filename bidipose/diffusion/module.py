@@ -95,11 +95,24 @@ class DiffusionLightningModule(pl.LightningModule):
         t = torch.randint(0, self.sampler.timesteps, (x.size(0),), device=x.device)
         x_noise, quat_noise, trans_noise = self.sampler.q_sample(x, quat, trans, t)
         x_pred, quat_pred, trans_pred = self.forward(x_noise, quat_noise, trans_noise, t)
-        loss_x = self.loss_fn(x_pred, x)
-        loss_quat = self.loss_fn(quat_pred, quat)
-        loss_trans = self.loss_fn(trans_pred, trans)
-        loss = loss_x + loss_quat + loss_trans
-        return loss, loss_x, loss_quat, loss_trans
+        pred = torch.cat(
+            [
+                x_pred.flatten(),
+                quat_pred.flatten(),
+                trans_pred.flatten(),
+            ],
+            dim=-1
+        )
+        gt = torch.cat(
+            [
+                x.flatten(),
+                quat.flatten(),
+                trans.flatten(),
+            ],
+            dim=-1
+        )
+        loss = self.loss_fn(pred, gt)
+        return loss
     
     def sample(
         self,
@@ -175,11 +188,8 @@ class DiffusionLightningModule(pl.LightningModule):
         Returns:
             torch.Tensor: Loss value.
         """
-        loss, loss_x, loss_quat, loss_trans = self.criterion(batch)
+        loss = self.criterion(batch)
         self.log("train/loss", loss)
-        self.log("train/loss_x", loss_x)
-        self.log("train/loss_quat", loss_quat)
-        self.log("train/loss_trans", loss_trans)
         return loss
     
     def validation_step(self, batch: Any, batch_idx: int) -> None:
@@ -190,11 +200,8 @@ class DiffusionLightningModule(pl.LightningModule):
             batch (Any): Batch data.
             batch_idx (int): Batch index.
         """
-        loss, loss_x, loss_quat, loss_trans = self.criterion(batch)
+        loss = self.criterion(batch)
         self.log("val/loss", loss)
-        self.log("val/loss_x", loss_x)
-        self.log("val/loss_quat", loss_quat)
-        self.log("val/loss_trans", loss_trans)
         # Save a few batches for later use
         if len(self.validation_batches) < self.num_validation_batches_to_inpaint:
             # Detach tensors to avoid memory leak
