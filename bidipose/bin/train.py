@@ -1,8 +1,9 @@
 import hydra
 from omegaconf import DictConfig
+import pytorch_lightning as pl
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import WandbLogger
-import pytorch_lightning as pl
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from bidipose.datasets.datamodule import StereoCameraDataModule
 import bidipose.models as models
@@ -84,9 +85,12 @@ def main(cfg: DictConfig) -> None:
         save_dir=cfg.logger.save_dir
     )
 
+    checkpoint_callback = ModelCheckpoint(**cfg.checkpoint)
+
     # Trainer
     trainer = Trainer(
         logger=wandb_logger,
+        callbacks=[checkpoint_callback],
         **cfg.trainer
     )
 

@@ -4,6 +4,7 @@ defaults:
   - sampler: ddpm_cosine
   - module: diffusion
   - logger: wandb
+  - checkpoint: checkpoint
   - trainer: trainer
   - local: local
 
@@ -23,5 +24,8 @@ logger:
 
 trainer:
   default_root_dir: ${base_dir}
+
+checkpoint:
+  dirpath: ${base_dir}/checkpoints
 
 seed: 42
