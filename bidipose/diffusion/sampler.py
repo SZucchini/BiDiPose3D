@@ -131,9 +131,9 @@ class DDPMSampler:
             torch.Tensor: Noised quaternion data at timestep t.
             torch.Tensor: Noised translation data at timestep t.
         """
-        x = self._q_sample(x_start, t)
-        quat = self._q_sample(quat_start, t)
-        trans = self._q_sample(trans_start, t)
+        x = self._q_sample(x_start, t.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1))
+        quat = self._q_sample(quat_start, t.unsqueeze(-1).unsqueeze(-1))
+        trans = self._q_sample(trans_start, t.unsqueeze(-1).unsqueeze(-1))
         return x, quat, trans
     
     def _p_sample(self, x: torch.Tensor, x0_pred: torch.Tensor, t: int) -> torch.Tensor:
@@ -177,7 +177,8 @@ class DDPMSampler:
         """
         if mask is not None and x_init is not None:
             if t > 0:
-                x_dummy = self._q_sample(x, torch.full((x.size(0),), t-1, device=x.device))
+                t_tensor = torch.full([x.size(0)] + [1] * (x.ndim - 1), t, device=x.device)
+                x_dummy = self._q_sample(x, t_tensor)
             else:
                 x_dummy = x_init
             # For masked inpainting, keep known regions from x_init

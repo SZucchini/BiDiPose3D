@@ -4,6 +4,7 @@ import pytorch_lightning as pl
 from typing import Any, List, Tuple, Optional
 from collections import defaultdict
 import numpy as np
+import logging
 
 import torch.nn as nn
 import torch.optim as optim
@@ -31,10 +32,10 @@ class DiffusionLightningModule(pl.LightningModule):
         sampler: DDPMSampler,
         optimizer_name: str,
         optimizer_params: dict,
-        num_validation_batches_to_sample: int = 10,
-        num_validation_batches_to_inpaint: int = 10,
-        num_plot_sample: int = 3,
-        num_plot_inpaint: int = 3,
+        num_validation_batches_to_sample: int = 2,
+        num_validation_batches_to_inpaint: int = 2,
+        num_plot_sample: int = 2,
+        num_plot_inpaint: int = 2,
         inpinting_spatial_name: List[str] = None,
         inpainting_temporal_interval: Tuple[int, int] = None,
         inpainting_camera_index: int = None,
@@ -89,8 +90,8 @@ class DiffusionLightningModule(pl.LightningModule):
         """
         x, quat, trans = batch
         x = x.to(self.device)
-        quat = quat.to(self.device)
-        trans = trans.to(self.device)
+        quat = quat.to(self.device).unsqueeze(-1)  # Ensure quaternion is of shape (B, 4, 1)
+        trans = trans.to(self.device).unsqueeze(-1)  # Ensure translation is of shape (B, 3, 1)
         t = torch.randint(0, self.sampler.timesteps, (x.size(0),), device=x.device)
         x_noise, quat_noise, trans_noise = self.sampler.q_sample(x, quat, trans, t)
         x_pred, quat_pred, trans_pred = self.forward(x_noise, quat_noise, trans_noise, t)
@@ -222,7 +223,8 @@ class DiffusionLightningModule(pl.LightningModule):
     
     def _log_animation(
         self,
-        key: str,
+        key1: str,
+        key2: str,
         x: Optional[list[torch.Tensor]] = None,
         quat: Optional[list[torch.Tensor]] = None,
         trans: Optional[list[torch.Tensor]] = None,
@@ -240,13 +242,13 @@ class DiffusionLightningModule(pl.LightningModule):
 
         paths_2d = []
         paths_3d = []
-        print(f"Saving animations for key: {key} at epoch {self.current_epoch}")
+        logging.info(f"Saving animations for key: {key1}/{key2} at epoch {self.current_epoch}")
         for i, (s_x, s_quat, s_trans, s_x_gt, s_quat_gt, s_trans_gt) in enumerate(zip(
             x, quat, trans, x_gt, quat_gt, trans_gt
         )):
-            print(f"Processing animation {i + 1}/{len(x)} for key: {key}")
+            logging.info(f"Processing animation {i + 1}/{len(x)} for key: {key1}/{key2}")
             # Log 2D pose animation
-            filename_2d = f"2d_{key}_epoch_{self.current_epoch:03d}_{i}.mp4"
+            filename_2d = f"2d_{key1.replace('/','_')}_{key1.replace('/','_')}_epoch_{self.current_epoch:03d}_{i}.mp4"
             video_path_2d = os.path.join(media_dir, filename_2d)
             ani = vis_pose2d(
                 pred_pose=s_x,
@@ -256,7 +258,7 @@ class DiffusionLightningModule(pl.LightningModule):
             paths_2d.append(video_path_2d)
 
             # Log 3D pose animation
-            filename_3d = f"3d_{key}_epoch_{self.current_epoch:03d}_{i}.mp4"
+            filename_3d = f"3d_{key1.replace('/','_')}_{key2.replace('/','_')}_epoch_{self.current_epoch:03d}_{i}.mp4"
             video_path_3d = os.path.join(media_dir, filename_3d)
             ani = vis_pose3d(
                 pred_pose=s_x,
@@ -268,37 +270,49 @@ class DiffusionLightningModule(pl.LightningModule):
             )
             ani.save(video_path_3d, writer='ffmpeg', fps=30)
             paths_3d.append(video_path_3d)
-        print(f"Saved {len(paths_2d)} 2D and {len(paths_3d)} 3D animations for key: {key}")
+        logging.info(f"Saved {len(paths_2d)} 2D and {len(paths_3d)} 3D animations for key: {key1}/{key2}")
 
         # Log the paths to the videos
-        print(f"Logging videos for key: {key} at epoch {self.current_epoch}")
-        self.log_videos(key=f"{key}_2d", paths=paths_2d, step=self.current_epoch)
-        self.log_videos(key=f"{key}_3d", paths=paths_3d, step=self.current_epoch)
-        print(f"Logged {len(paths_2d)} 2D and {len(paths_3d)} 3D animations for key: {key}")      
+        logging.info(f"Logging videos for key: {key1}/{key2} at epoch {self.current_epoch}")
+        self.logger.log_video(
+            key=f"{key1}/2d_{key2}", 
+            videos=paths_2d, 
+            step=self.current_epoch, 
+            format=['mp4'] * len(paths_2d)
+        )
+        self.logger.log_video(
+            key=f"{key1}/3d_{key2}", 
+            videos=paths_3d, 
+            step=self.current_epoch, 
+            format=['mp4'] * len(paths_2d)
+        )
+        logging.info(f"Logged {len(paths_2d)} 2D and {len(paths_3d)} 3D animations for key: {key1}/{key2}")      
     
     def on_validation_epoch_end(self) -> None:
         """
         Called at the end of the validation epoch.
         Uses the saved validation batches.
         """
+        if self.trainer.sanity_checking: return
+
         if len(self.validation_batches) > 0:
             x, quat, trans = self.validation_batches[0]
             x_shape = x.shape
-            quat_shape = quat.shape
-            trans_shape = trans.shape
+            quat_shape = quat.unsqueeze(-1).shape
+            trans_shape = trans.unsqueeze(-1).shape
 
         # Validate inpainting
         plot_counter = 0
         error_dict = defaultdict(lambda: defaultdict(list))
         gt_dict = defaultdict(list)
         data_dict = defaultdict(lambda: defaultdict(list))
-        print(f"Validating {len(self.validation_batches)} batches for inpainting...")
+        logging.info(f"Validating {len(self.validation_batches)} batches for inpainting...")
         for i, batch in enumerate(self.validation_batches):
-            print(f"Processing validation batch {i + 1}/{len(self.validation_batches)} for inpainting...")
+            logging.info(f"Processing validation batch {i + 1}/{len(self.validation_batches)} for inpainting...")
             x, quat, trans = batch
             x = x.to(self.device)
-            quat = quat.to(self.device)
-            trans = trans.to(self.device)
+            quat = quat.to(self.device).unsqueeze(-1)  # Ensure quaternion is of shape (B, 4, 1)
+            trans = trans.to(self.device).unsqueeze(-1)  # Ensure translation is of shape (B, 3, 1)
             num_plot = min(self.num_plot_inpaint - plot_counter, x.shape[0])
             plot_counter += num_plot
 
@@ -320,8 +334,8 @@ class DiffusionLightningModule(pl.LightningModule):
                     quat_mask=quat_mask,
                     trans_mask=trans_mask,
                 )
-                epipolar_error_value = epipolar_error(x_inpainted, quat, trans, mask=x_mask[0, :, :, 0])
-                keypoint_error_value = key_point_error_2d(x_inpainted, x, mask=x_mask)
+                epipolar_error_value = epipolar_error(x_inpainted, quat, trans, mask=~x_mask[0, :, :, 0])
+                keypoint_error_value = key_point_error_2d(x_inpainted, x, mask=~x_mask)
                 error_dict['epipolar_error']['spatial'].append(epipolar_error_value.item())
                 error_dict['keypoint_error']['spatial'].append(keypoint_error_value.item())
                 if num_plot > 0:
@@ -344,8 +358,8 @@ class DiffusionLightningModule(pl.LightningModule):
                     quat_mask=quat_mask,
                     trans_mask=trans_mask,
                 )
-                epipolar_error_value = epipolar_error(x_inpainted, quat, trans, mask=x_mask[0, :, :, 0])
-                keypoint_error_value = key_point_error_2d(x_inpainted, x, mask=x_mask)
+                epipolar_error_value = epipolar_error(x_inpainted, quat, trans, mask=~x_mask[0, :, :, 0])
+                keypoint_error_value = key_point_error_2d(x_inpainted, x, mask=~x_mask)
                 error_dict['epipolar_error']['temporal'].append(epipolar_error_value.item())
                 error_dict['keypoint_error']['temporal'].append(keypoint_error_value.item())
                 if num_plot > 0:
@@ -365,7 +379,7 @@ class DiffusionLightningModule(pl.LightningModule):
                     trans_mask=trans_mask,
                 )
                 epipolar_error_value = epipolar_error(x_inpainted, quat, trans)
-                keypoint_error_value = key_point_error_2d(x_inpainted, x, mask=x_mask)
+                keypoint_error_value = key_point_error_2d(x_inpainted, x, mask=~x_mask)
                 error_dict['epipolar_error']['camera'].append(epipolar_error_value.item())
                 error_dict['keypoint_error']['camera'].append(keypoint_error_value.item())
                 if num_plot > 0:
@@ -392,23 +406,23 @@ class DiffusionLightningModule(pl.LightningModule):
             if num_plot > 0:
                 data_dict['camera_params']['quat'].append(quat_inpainted[:num_plot])
                 data_dict['camera_params']['trans'].append(trans_inpainted[:num_plot])
-        print(f"Processed {len(self.validation_batches)} validation batches for inpainting.")
+        logging.info(f"Processed {len(self.validation_batches)} validation batches for inpainting.")
         # Log the errors
         for key1, e_dict in error_dict.items():
             for key2, values in e_dict.items():
                 if len(values) > 0:
                     mean_value = torch.tensor(values, device=self.device).mean().item()
-                    self.log(f"val/{key1}/{key2}_inpainting", mean_value)
-                    print(f"Validation {key1} {key2} inpainting: {mean_value:.4f}")
+                    self.log(f"metrics/{key1}/{key2}_inpainting", mean_value)
+                    logging.info(f"Validation {key1} for {key2} inpainting: {mean_value:.4f}")
         # Log the data
         for key, data in data_dict.items():
-            self._log_animation(f'val/{key}_inpainting', **data, **gt_dict)
+            self._log_animation('videos', f'{key}_inpainting', **data, **gt_dict)
 
         # Clear the validation batches to free memory
         if len(self.validation_batches) > 0:
-            print(f"Processed {len(self.validation_batches)} validation batches for inpainting.")
+            logging.info(f"Processed {len(self.validation_batches)} validation batches for inpainting.")
         else:
-            print("No validation batches to process for inpainting.")
+            logging.info("No validation batches to process for inpainting.")
         self.validation_batches.clear()
         del data_dict, gt_dict, error_dict
 
@@ -416,9 +430,9 @@ class DiffusionLightningModule(pl.LightningModule):
         plot_counter = 0
         error_list = []
         data_dict = defaultdict(list)
-        print(f"Validating sampling with {self.num_plot_sample} samples...")
+        logging.info(f"Validating sampling with {self.num_plot_sample} samples...")
         for i in range(self.num_plot_sample):
-            print(f"Processing validation sample {i + 1}/{self.num_plot_sample} for sampling...")
+            logging.info(f"Processing validation sample {i + 1}/{self.num_plot_sample} for sampling...")
             num_plot = min(self.num_plot_sample - plot_counter, x_shape[0])
             plot_counter += num_plot
 
@@ -435,21 +449,21 @@ class DiffusionLightningModule(pl.LightningModule):
                 data_dict['quat'].append(quat_sample[:num_plot])
                 data_dict['trans'].append(trans_sample[:num_plot])
 
-        print(f"Processed {self.num_plot_sample} samples for validation sampling.")
+        logging.info(f"Processed {self.num_plot_sample} samples for validation sampling.")
 
         # Log the sampling error
         if len(error_list) > 0:
             mean_error = torch.tensor(error_list, device=self.device).mean().item()
-            self.log("val/epipolar_error/sampling", mean_error)
-            print(f"Validation epipolar error sampling: {mean_error:.4f}")
+            self.log("metrics/epipolar_error/sampling", mean_error)
+            logging.info(f"Validation epipolar_error for sampling: {mean_error:.4f}")
         # Log the sampled data
         if len(data_dict['x']) > 0:
-            self._log_animation('val/sampling', **data_dict)
+            self._log_animation('videos', 'sampling', **data_dict)
         # Clear the data dictionary to free memory
         if len(data_dict) > 0:
-            print(f"Processed {len(data_dict['x'])} samples for validation sampling.")
+            logging.info(f"Processed {len(data_dict['x'])} samples for validation sampling.")
         else:
-            print("No samples to process for validation sampling.")
+            logging.info("No samples to process for validation sampling.")
         data_dict.clear()
         del data_dict, error_list
     
