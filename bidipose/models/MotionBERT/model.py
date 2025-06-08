@@ -17,6 +17,38 @@ from bidipose.models.base import BaseModel
 from .drop import DropPath
 
 
+class SinusoidalPositionEmbeddings(nn.Module):
+    """Sinusoidal position embeddings for timestep encoding."""
+
+    def __init__(self, dim: int):
+        """Initialize sinusoidal position embeddings.
+
+        Args:
+            dim (int): Embedding dimension.
+
+        """
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, time: torch.Tensor) -> torch.Tensor:
+        """Forward pass for sinusoidal position embeddings.
+
+        Args:
+            time (torch.Tensor): Timestep tensor with shape (B,).
+
+        Returns:
+            torch.Tensor: Sinusoidal embeddings with shape (B, dim).
+
+        """
+        device = time.device
+        half_dim = self.dim // 2
+        embeddings = math.log(10000) / (half_dim - 1)
+        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
+        embeddings = time[:, None] * embeddings[None, :]
+        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+        return embeddings
+
+
 def _no_grad_trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
@@ -382,6 +414,7 @@ class DSTformer(BaseModel):
         drop_path_rate=0.0,
         norm_layer=nn.LayerNorm,
         att_fuse=True,
+        timestep_embed_dim=64,
     ):
         super().__init__()
         norm_layer = getattr(nn, norm_layer) if isinstance(norm_layer, str) else norm_layer
@@ -442,6 +475,14 @@ class DSTformer(BaseModel):
 
         self.temp_embed = nn.Parameter(torch.zeros(1, maxlen, 1, dim_feat))
         self.pos_embed = nn.Parameter(torch.zeros(1, num_joints, dim_feat))
+
+        self.time_mlp = nn.Sequential(
+            SinusoidalPositionEmbeddings(timestep_embed_dim),
+            nn.Linear(timestep_embed_dim, timestep_embed_dim * 2),
+            nn.GELU(),
+            nn.Linear(timestep_embed_dim * 2, dim_feat),
+        )
+
         trunc_normal_(self.temp_embed, std=0.02)
         trunc_normal_(self.pos_embed, std=0.02)
         self.apply(self._init_weights)
@@ -504,7 +545,11 @@ class DSTformer(BaseModel):
         trans = trans.expand(-1, -1, joints, -1) + self.pos_embed + self.type_embed[2]
 
         x = torch.cat((x, quat, trans), dim=1)
-        # x = x + t  NOTE: It depends on the shape of t.
+        if t is not None:
+            time_embed = self.time_mlp(t)  # (B, 1, D)
+            time_embed = time_embed.unsqueeze(1)  # (B, 1, 1, D)
+            time_embed = time_embed.expand(-1, x.size(1), x.size(2), -1)  # (B, T+7, J, D)
+            x = x + time_embed
 
         frames_all = x.shape[1]
         x = x + self.temp_embed[:, :frames_all, :, :]

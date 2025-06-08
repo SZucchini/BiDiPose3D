@@ -2,6 +2,7 @@
 
 from functools import partial
 
+import pytest
 import torch
 import torch.nn as nn
 
@@ -9,7 +10,8 @@ from bidipose.models.MotionAGFormer.model import MotionAGFormer
 from bidipose.models.MotionBERT.model import DSTformer
 
 
-def test_motion_agformer():
+@pytest.mark.parametrize("t", [None, torch.randn(1, 1)])
+def test_motion_agformer(t):
     """Test the MotionAGFormer model."""
     model = MotionAGFormer(n_layers=2, dim_feat=32, dim_in=6, n_frames=88)
     model.eval()
@@ -18,7 +20,7 @@ def test_motion_agformer():
     quat = torch.randn(1, 4)
     trans = torch.randn(1, 3)
     with torch.no_grad():
-        pred_pose, pred_quat, pred_trans = model(x, quat, trans)
+        pred_pose, pred_quat, pred_trans = model(x, quat, trans, t=t)
     assert pred_pose.shape == (1, 81, 17, 6)
     assert pred_quat.shape == (1, 4)
     assert pred_trans.shape == (1, 3)
@@ -29,7 +31,8 @@ def test_motion_agformer():
     assert torch.allclose(trans_norm, torch.ones_like(trans_norm), atol=1e-6), f"Translation norm: {trans_norm}"
 
 
-def test_dstformer():
+@pytest.mark.parametrize("t", [None, torch.randn(1, 1)])
+def test_dstformer(t):
     """Test the DSTformer model."""
     model = DSTformer(dim_feat=512, mlp_ratio=2, norm_layer=partial(nn.LayerNorm, eps=1e-6))
 
@@ -37,7 +40,7 @@ def test_dstformer():
     quat = torch.randn(1, 4)
     trans = torch.randn(1, 3)
     with torch.no_grad():
-        pred_pose, pred_quat, pred_trans = model(x, quat, trans)
+        pred_pose, pred_quat, pred_trans = model(x, quat, trans, t=t)
     assert pred_pose.shape == (1, 81, 17, 6)
     assert pred_quat.shape == (1, 4)
     assert pred_trans.shape == (1, 3)
