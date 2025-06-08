@@ -92,6 +92,8 @@ class DDPMSampler:
                 quat_mask=quat_mask,
                 trans_mask=trans_mask,
             )
+        quat = torch.nn.functional.normalize(quat, dim=-1)  # Normalize quaternion to unit length
+        trans = torch.nn.functional.normalize(trans, dim=-1)  # Normalize translation to unit length
         return x, quat, trans
     
     def _q_sample(self, x_start: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
@@ -160,7 +162,7 @@ class DDPMSampler:
             return x_mean + sigma * noise
         else:
             # No noise at the last step
-            return x0_pred
+            return x_mean
         
     def _masked_fill(self, x: torch.Tensor, x_init: torch.Tensor, mask: torch.Tensor, t:int) -> torch.Tensor:
         """
