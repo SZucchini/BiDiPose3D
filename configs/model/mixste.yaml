@@ -1,0 +1,15 @@
+name: MixSTE2
+params:
+  num_frame: 81
+  num_joints: 17
+  in_chans: 6
+  embed_dim_ratio: 512
+  depth: 8
+  num_heads: 8
+  mlp_ratio: 2.0
+  qkv_bias: true
+  qk_scale: null
+  drop_rate: 0.0
+  attn_drop_rate: 0.0
+  drop_path_rate: 0.2
+  norm_layer: null

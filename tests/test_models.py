@@ -6,6 +6,7 @@ import pytest
 import torch
 import torch.nn as nn
 
+from bidipose.models.MixSTE.model import MixSTE2
 from bidipose.models.MotionAGFormer.model import MotionAGFormer
 from bidipose.models.MotionBERT.model import DSTformer
 
@@ -45,6 +46,26 @@ def test_dstformer(t):
     x = torch.randn(4, 81, 17, 6)
     quat = torch.randn(4, 4)
     trans = torch.randn(4, 3)
+    with torch.no_grad():
+        pred_pose, pred_quat, pred_trans = model(x, quat, trans, t=t)
+    assert pred_pose.shape == (4, 81, 17, 6)
+    assert pred_quat.shape == (4, 4)
+    assert pred_trans.shape == (4, 3)
+
+    quat_norm = torch.norm(pred_quat, dim=1, keepdim=True)
+    assert torch.allclose(quat_norm, torch.ones_like(quat_norm), atol=1e-6), f"Quaternion norm: {quat_norm}"
+    trans_norm = torch.norm(pred_trans, dim=1, keepdim=True)
+    assert torch.allclose(trans_norm, torch.ones_like(trans_norm), atol=1e-6), f"Translation norm: {trans_norm}"
+
+
+def test_mixste():
+    """Test the DSTformer model."""
+    model = MixSTE2()
+
+    x = torch.randn(4, 81, 17, 6)
+    quat = torch.randn(4, 4)
+    trans = torch.randn(4, 3)
+    t = torch.randn(4)
     with torch.no_grad():
         pred_pose, pred_quat, pred_trans = model(x, quat, trans, t=t)
     assert pred_pose.shape == (4, 81, 17, 6)
