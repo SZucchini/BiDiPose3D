@@ -1,31 +1,33 @@
-import os
-import torch
-import pytorch_lightning as pl
-from typing import Any, List, Tuple, Optional
-from collections import defaultdict
-import numpy as np
 import logging
+import os
+from collections import defaultdict
+from typing import Any, List, Optional, Tuple
 
+import numpy as np
+import pytorch_lightning as pl
+import torch
 import torch.nn as nn
 import torch.optim as optim
 
 from bidipose.diffusion.sampler import DDPMSampler
+from bidipose.diffusion.utils import get_camera_mask, get_spatial_mask, get_temporal_mask
+from bidipose.eval.metrics import camera_direction_error, camera_rotation_error, epipolar_error, key_point_error_2d
 from bidipose.models.base import BaseModel
-from bidipose.diffusion.utils import get_spatial_mask, get_temporal_mask, get_camera_mask
-from bidipose.eval.metrics import epipolar_error, key_point_error_2d, camera_direction_error, camera_rotation_error
+from bidipose.statics.joints import h36m_joints_name_to_index
 from bidipose.visualize.animation_2d import vis_pose2d
 from bidipose.visualize.animation_3d import vis_pose3d
-from bidipose.statics.joints import h36m_joints_name_to_index
+
 
 class DiffusionLightningModule(pl.LightningModule):
-    """
-    PyTorch LightningModule for training a diffusion model.
+    """PyTorch LightningModule for training a diffusion model.
 
     Args:
         model (nn.Module): Diffusion model.
         lr (float): Learning rate.
         betas (tuple): Adam optimizer betas.
+
     """
+
     def __init__(
         self,
         model: BaseModel,
@@ -36,7 +38,7 @@ class DiffusionLightningModule(pl.LightningModule):
         num_validation_batches_to_inpaint: int = 2,
         num_plot_sample: int = 2,
         num_plot_inpaint: int = 2,
-        inpinting_spatial_name: List[str] = None,
+        inpainting_spatial_name: List[str] = None,
         inpainting_temporal_interval: Tuple[int, int] = None,
         inpainting_camera_index: int = None,
     ) -> None:
@@ -51,21 +53,18 @@ class DiffusionLightningModule(pl.LightningModule):
         self.num_plot_sample = num_plot_sample
         self.num_plot_inpaint = num_plot_inpaint
         self.validation_batches: List[Any] = []
-        self.inpinting_spatial_index = [
-            h36m_joints_name_to_index[name] for name in inpinting_spatial_name
-        ] if inpinting_spatial_name is not None else None
+        self.inpainting_spatial_index = (
+            [h36m_joints_name_to_index[name] for name in inpainting_spatial_name]
+            if inpainting_spatial_name is not None
+            else None
+        )
         self.inpainting_temporal_interval = inpainting_temporal_interval
         self.inpainting_camera_index = inpainting_camera_index
 
     def forward(
-        self, 
-        x: torch.Tensor, 
-        quat: torch.Tensor, 
-        trans: torch.Tensor,
-        t: torch.Tensor
+        self, x: torch.Tensor, quat: torch.Tensor, trans: torch.Tensor, t: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Forward pass.
+        """Forward pass.
 
         Args:
             x (torch.Tensor): Input tensor.
@@ -77,16 +76,19 @@ class DiffusionLightningModule(pl.LightningModule):
             torch.Tensor: Output tensor.
             torch.Tensor: Quaternion tensor.
             torch.Tensor: Translation tensor.
+
         """
         return self.model.forward(x, quat, trans, t)
-        
+
     def criterion(self, batch: Any) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Compute the loss for a batch.
+        """Compute the loss for a batch.
+
         Args:
             batch (Any): Batch data.
+
         Returns:
             tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: Loss and individual component losses.
+
         """
         x, quat, trans = batch
         x = x.to(self.device)
@@ -101,7 +103,7 @@ class DiffusionLightningModule(pl.LightningModule):
                 quat_pred.flatten(),
                 trans_pred.flatten(),
             ],
-            dim=-1
+            dim=-1,
         )
         gt = torch.cat(
             [
@@ -109,26 +111,27 @@ class DiffusionLightningModule(pl.LightningModule):
                 quat.flatten(),
                 trans.flatten(),
             ],
-            dim=-1
+            dim=-1,
         )
         loss = self.loss_fn(pred, gt)
         return loss
-    
+
     def sample(
         self,
         x_shape: Tuple[int, ...],
         quat_shape: Tuple[int, ...],
         trans_shape: Tuple[int, ...],
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Sample from the diffusion model.
+        """Sample from the diffusion model.
 
         Args:
             x_shape (Tuple[int, ...]): Shape of the 2D pose data.
             quat_shape (Tuple[int, ...]): Shape of the quaternion data.
             trans_shape (Tuple[int, ...]): Shape of the translation data.
+
         Returns:
             Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: Sampled 2D pose, quaternion, and translation data.
+
         """
         x, quat, trans = self.sampler.sample(
             self.model,
@@ -137,7 +140,7 @@ class DiffusionLightningModule(pl.LightningModule):
             trans_shape,
         )
         return x, quat, trans
-    
+
     def inpaint(
         self,
         x_init: torch.Tensor,
@@ -147,8 +150,7 @@ class DiffusionLightningModule(pl.LightningModule):
         quat_mask: torch.Tensor = None,
         trans_mask: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Inpaint missing data using the diffusion model.
+        """Inpaint missing data using the diffusion model.
 
         Args:
             x_mask (torch.Tensor): Mask for 2D pose data.
@@ -157,8 +159,10 @@ class DiffusionLightningModule(pl.LightningModule):
             x_init (torch.Tensor): Initial 2D pose data for masked regions.
             quat_init (torch.Tensor): Initial quaternion data for masked regions.
             trans_init (torch.Tensor): Initial translation data for masked regions.
+
         Returns:
             Tuple[torch.Tensor, torch.Tensor, torch.Tensor]: Inpainted 2D pose, quaternion, and translation data.
+
         """
         x_shape = x_init.shape
         quat_shape = quat_init.shape
@@ -178,8 +182,7 @@ class DiffusionLightningModule(pl.LightningModule):
         return x, quat, trans
 
     def training_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
-        """
-        Training step.
+        """Training step.
 
         Args:
             batch (Any): Batch data.
@@ -187,18 +190,19 @@ class DiffusionLightningModule(pl.LightningModule):
 
         Returns:
             torch.Tensor: Loss value.
+
         """
         loss = self.criterion(batch)
         self.log("train/loss", loss)
         return loss
-    
+
     def validation_step(self, batch: Any, batch_idx: int) -> None:
-        """
-        Validation step.
+        """Validation step.
 
         Args:
             batch (Any): Batch data.
             batch_idx (int): Batch index.
+
         """
         loss = self.criterion(batch)
         self.log("val/loss", loss)
@@ -209,7 +213,7 @@ class DiffusionLightningModule(pl.LightningModule):
             self.validation_batches.append(detached_batch)
 
     def _process_data_for_logging(
-        self, 
+        self,
         x: Optional[list[torch.Tensor]] = None,
         x_gt: Optional[list[torch.Tensor]] = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
@@ -220,11 +224,12 @@ class DiffusionLightningModule(pl.LightningModule):
         if x_gt is not None:
             x_gt = torch.cat(x_gt, dim=0)
             x_gt = x_gt.detach().cpu().numpy()
-            if x is None: x = x_gt
+            if x is None:
+                x = x_gt
         else:
             x_gt = [None] * x.shape[0]
         return x, x_gt
-    
+
     def _log_animation(
         self,
         key1: str,
@@ -247,22 +252,26 @@ class DiffusionLightningModule(pl.LightningModule):
         paths_2d = []
         paths_3d = []
         logging.info(f"Saving animations for key: {key1}/{key2} at epoch {self.current_epoch}")
-        for i, (s_x, s_quat, s_trans, s_x_gt, s_quat_gt, s_trans_gt) in enumerate(zip(
-            x, quat, trans, x_gt, quat_gt, trans_gt
-        )):
+        for i, (s_x, s_quat, s_trans, s_x_gt, s_quat_gt, s_trans_gt) in enumerate(
+            zip(x, quat, trans, x_gt, quat_gt, trans_gt, strict=False)
+        ):
             logging.info(f"Processing animation {i + 1}/{len(x)} for key: {key1}/{key2}")
             # Log 2D pose animation
-            filename_2d = f"2d_{key1.replace('/','_')}_{key1.replace('/','_')}_epoch_{self.current_epoch:03d}_{i}.mp4"
+            filename_2d = (
+                f"2d_{key1.replace('/', '_')}_{key1.replace('/', '_')}_epoch_{self.current_epoch:03d}_{i}.mp4"
+            )
             video_path_2d = os.path.join(media_dir, filename_2d)
             ani = vis_pose2d(
                 pred_pose=s_x,
                 gt_pose=s_x_gt,
             )
-            ani.save(video_path_2d, writer='ffmpeg', fps=30)
+            ani.save(video_path_2d, writer="ffmpeg", fps=30)
             paths_2d.append(video_path_2d)
 
             # Log 3D pose animation
-            filename_3d = f"3d_{key1.replace('/','_')}_{key2.replace('/','_')}_epoch_{self.current_epoch:03d}_{i}.mp4"
+            filename_3d = (
+                f"3d_{key1.replace('/', '_')}_{key2.replace('/', '_')}_epoch_{self.current_epoch:03d}_{i}.mp4"
+            )
             video_path_3d = os.path.join(media_dir, filename_3d)
             ani = vis_pose3d(
                 pred_pose=s_x,
@@ -272,32 +281,26 @@ class DiffusionLightningModule(pl.LightningModule):
                 gt_quat=s_quat_gt,
                 gt_trans=s_trans_gt,
             )
-            ani.save(video_path_3d, writer='ffmpeg', fps=30)
+            ani.save(video_path_3d, writer="ffmpeg", fps=30)
             paths_3d.append(video_path_3d)
         logging.info(f"Saved {len(paths_2d)} 2D and {len(paths_3d)} 3D animations for key: {key1}/{key2}")
 
         # Log the paths to the videos
         logging.info(f"Logging videos for key: {key1}/{key2} at epoch {self.current_epoch}")
         self.logger.log_video(
-            key=f"{key1}/2d/{key2}", 
-            videos=paths_2d, 
-            step=self.current_epoch, 
-            format=['mp4'] * len(paths_2d)
+            key=f"{key1}/2d/{key2}", videos=paths_2d, step=self.current_epoch, format=["mp4"] * len(paths_2d)
         )
         self.logger.log_video(
-            key=f"{key1}/3d/{key2}", 
-            videos=paths_3d, 
-            step=self.current_epoch, 
-            format=['mp4'] * len(paths_2d)
+            key=f"{key1}/3d/{key2}", videos=paths_3d, step=self.current_epoch, format=["mp4"] * len(paths_2d)
         )
-        logging.info(f"Logged {len(paths_2d)} 2D and {len(paths_3d)} 3D animations for key: {key1}/{key2}")      
-    
+        logging.info(f"Logged {len(paths_2d)} 2D and {len(paths_3d)} 3D animations for key: {key1}/{key2}")
+
     def on_validation_epoch_end(self) -> None:
-        """
-        Called at the end of the validation epoch.
+        """Called at the end of the validation epoch.
         Uses the saved validation batches.
         """
-        if self.trainer.sanity_checking: return
+        if self.trainer.sanity_checking:
+            return
 
         if len(self.validation_batches) > 0:
             x, quat, trans = self.validation_batches[0]
@@ -321,13 +324,13 @@ class DiffusionLightningModule(pl.LightningModule):
             plot_counter += num_plot
 
             if num_plot > 0:
-                gt_dict['x_gt'].append(x[:num_plot])
-                gt_dict['quat_gt'].append(quat[:num_plot])
-                gt_dict['trans_gt'].append(trans[:num_plot])
+                gt_dict["x_gt"].append(x[:num_plot])
+                gt_dict["quat_gt"].append(quat[:num_plot])
+                gt_dict["trans_gt"].append(trans[:num_plot])
 
             # Validate spatial inpainting
-            if self.inpinting_spatial_index is not None:
-                x_mask = ~get_spatial_mask(x, self.inpinting_spatial_index)
+            if self.inpainting_spatial_index is not None:
+                x_mask = ~get_spatial_mask(x, self.inpainting_spatial_index)
                 quat_mask = torch.ones_like(quat, dtype=torch.bool)
                 trans_mask = torch.ones_like(trans, dtype=torch.bool)
                 x_inpainted, _, _ = self.inpaint(
@@ -340,16 +343,15 @@ class DiffusionLightningModule(pl.LightningModule):
                 )
                 epipolar_error_value = epipolar_error(x_inpainted, quat, trans, mask=~x_mask[0, :, :, 0])
                 keypoint_error_value = key_point_error_2d(x_inpainted, x, mask=~x_mask)
-                error_dict['epipolar_error']['spatial'].append(epipolar_error_value.item())
-                error_dict['keypoint_error']['spatial'].append(keypoint_error_value.item())
+                error_dict["epipolar_error"]["spatial"].append(epipolar_error_value.item())
+                error_dict["keypoint_error"]["spatial"].append(keypoint_error_value.item())
                 if num_plot > 0:
-                    data_dict['spatial']['x'].append(x_inpainted[:num_plot])
+                    data_dict["spatial"]["x"].append(x_inpainted[:num_plot])
 
             # Validate temporal inpainting
             if self.inpainting_temporal_interval is not None:
                 temporal_index = torch.arange(
-                    self.inpainting_temporal_interval[0],
-                    self.inpainting_temporal_interval[1]
+                    self.inpainting_temporal_interval[0], self.inpainting_temporal_interval[1]
                 )
                 x_mask = ~get_temporal_mask(x, temporal_index)
                 quat_mask = torch.ones_like(quat, dtype=torch.bool)
@@ -364,10 +366,10 @@ class DiffusionLightningModule(pl.LightningModule):
                 )
                 epipolar_error_value = epipolar_error(x_inpainted, quat, trans, mask=~x_mask[0, :, :, 0])
                 keypoint_error_value = key_point_error_2d(x_inpainted, x, mask=~x_mask)
-                error_dict['epipolar_error']['temporal'].append(epipolar_error_value.item())
-                error_dict['keypoint_error']['temporal'].append(keypoint_error_value.item())
+                error_dict["epipolar_error"]["temporal"].append(epipolar_error_value.item())
+                error_dict["keypoint_error"]["temporal"].append(keypoint_error_value.item())
                 if num_plot > 0:
-                    data_dict['temporal']['x'].append(x_inpainted[:num_plot])
+                    data_dict["temporal"]["x"].append(x_inpainted[:num_plot])
 
             # Validate camera inpainting
             if self.inpainting_camera_index is not None:
@@ -384,10 +386,10 @@ class DiffusionLightningModule(pl.LightningModule):
                 )
                 epipolar_error_value = epipolar_error(x_inpainted, quat, trans)
                 keypoint_error_value = key_point_error_2d(x_inpainted, x, mask=~x_mask)
-                error_dict['epipolar_error']['camera'].append(epipolar_error_value.item())
-                error_dict['keypoint_error']['camera'].append(keypoint_error_value.item())
+                error_dict["epipolar_error"]["camera"].append(epipolar_error_value.item())
+                error_dict["keypoint_error"]["camera"].append(keypoint_error_value.item())
                 if num_plot > 0:
-                    data_dict['camera']['x'].append(x_inpainted[:num_plot])
+                    data_dict["camera"]["x"].append(x_inpainted[:num_plot])
 
             # Validate camera parameter inpainting
             x_mask = torch.ones_like(x, dtype=torch.bool)
@@ -404,12 +406,12 @@ class DiffusionLightningModule(pl.LightningModule):
             epipolar_error_value = epipolar_error(x, quat_inpainted, trans_inpainted)
             camera_direction_error_value = camera_rotation_error(quat_inpainted, quat)
             camera_translation_error_value = camera_direction_error(trans_inpainted, trans)
-            error_dict['epipolar_error']['camera_params'].append(epipolar_error_value.item())
-            error_dict['camera_direction_error']['camera_params'].append(camera_direction_error_value.item())
-            error_dict['camera_translation_error']['camera_params'].append(camera_translation_error_value.item())
+            error_dict["epipolar_error"]["camera_params"].append(epipolar_error_value.item())
+            error_dict["camera_direction_error"]["camera_params"].append(camera_direction_error_value.item())
+            error_dict["camera_translation_error"]["camera_params"].append(camera_translation_error_value.item())
             if num_plot > 0:
-                data_dict['camera_params']['quat'].append(quat_inpainted[:num_plot])
-                data_dict['camera_params']['trans'].append(trans_inpainted[:num_plot])
+                data_dict["camera_params"]["quat"].append(quat_inpainted[:num_plot])
+                data_dict["camera_params"]["trans"].append(trans_inpainted[:num_plot])
         logging.info(f"Processed {len(self.validation_batches)} validation batches for inpainting.")
         # Log the errors
         for key1, e_dict in error_dict.items():
@@ -420,7 +422,7 @@ class DiffusionLightningModule(pl.LightningModule):
                     logging.info(f"Validation {key1} for {key2} inpainting: {mean_value:.4f}")
         # Log the data
         for key, data in data_dict.items():
-            self._log_animation('videos', f'{key}_inpainting', **data, **gt_dict)
+            self._log_animation("videos", f"{key}_inpainting", **data, **gt_dict)
 
         # Clear the validation batches to free memory
         if len(self.validation_batches) > 0:
@@ -449,9 +451,9 @@ class DiffusionLightningModule(pl.LightningModule):
             error_list.append(epipolar_error_value.item())
 
             if num_plot > 0:
-                data_dict['x'].append(x_sample[:num_plot])
-                data_dict['quat'].append(quat_sample[:num_plot])
-                data_dict['trans'].append(trans_sample[:num_plot])
+                data_dict["x"].append(x_sample[:num_plot])
+                data_dict["quat"].append(quat_sample[:num_plot])
+                data_dict["trans"].append(trans_sample[:num_plot])
 
         logging.info(f"Processed {self.num_plot_sample} samples for validation sampling.")
 
@@ -461,8 +463,8 @@ class DiffusionLightningModule(pl.LightningModule):
             self.log("metrics/epipolar_error/sampling", mean_error)
             logging.info(f"Validation epipolar_error for sampling: {mean_error:.4f}")
         # Log the sampled data
-        if len(data_dict['x']) > 0:
-            self._log_animation('videos', 'sampling', **data_dict)
+        if len(data_dict["x"]) > 0:
+            self._log_animation("videos", "sampling", **data_dict)
         # Clear the data dictionary to free memory
         if len(data_dict) > 0:
             logging.info(f"Processed {len(data_dict['x'])} samples for validation sampling.")
@@ -470,17 +472,13 @@ class DiffusionLightningModule(pl.LightningModule):
             logging.info("No samples to process for validation sampling.")
         data_dict.clear()
         del data_dict, error_list
-    
+
     def configure_optimizers(self) -> optim.Optimizer:
-        """
-        Configure optimizers for training.
+        """Configure optimizers for training.
 
         Returns:
             optim.Optimizer: Adam optimizer.
+
         """
-        optimizer = getattr(optim, self.optimizer_name)(
-            self.model.parameters(),
-            **self.optimizer_params
-        )
+        optimizer = getattr(optim, self.optimizer_name)(self.model.parameters(), **self.optimizer_params)
         return optimizer
-    
