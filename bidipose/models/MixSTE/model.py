@@ -208,7 +208,7 @@ class MixSTE2(BaseModel):
         """
         super().__init__()
 
-        norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
+        norm_layer = getattr(nn, norm_layer) if isinstance(norm_layer, str) else partial(nn.LayerNorm, eps=1e-6)
         embed_dim = embed_dim_ratio  #### temporal embed_dim is num_joints * spatial embedding dim ratio
         out_dim = 6  #### output dimension is num_joints * 3
         self.num_frame = num_frame
