@@ -547,7 +547,7 @@ class DSTformer(BaseModel):
         x = torch.cat((x, quat, trans), dim=1)
         if t is not None:
             time_embed = self.time_mlp(t)  # (B, 1, D)
-            time_embed = time_embed.unsqueeze(1)  # (B, 1, 1, D)
+            time_embed = time_embed.unsqueeze(1).unsqueeze(1)  # (B, 1, 1, D)
             time_embed = time_embed.expand(bs, x.size(1), x.size(2), -1)  # (B, T+7, J, D)
             x = x + time_embed
 
