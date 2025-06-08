@@ -1,23 +1,31 @@
-import torch
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
+import torch
+
 from bidipose.diffusion.module import DiffusionLightningModule
+
 
 class DummyModel(torch.nn.Module):
     def forward(self, x, quat, trans, t):
         return x + 1, quat + 1, trans + 1
+
     def parameters(self):
         return [torch.nn.Parameter(torch.randn(1))]
 
+
 class DummySampler:
     timesteps = 10
+
     def q_sample(self, x, quat, trans, t):
         return x + 0.1, quat + 0.1, trans + 0.1
+
     def sample(self, model, x_shape, quat_shape, trans_shape, **kwargs):
         x = torch.zeros(x_shape)
         quat = torch.zeros(quat_shape)
         trans = torch.zeros(trans_shape)
         return x, quat, trans
+
 
 @pytest.fixture
 def module():
@@ -33,10 +41,11 @@ def module():
         num_validation_batches_to_inpaint=2,
         num_plot_sample=1,
         num_plot_inpaint=1,
-        inpinting_spatial_name=None,
+        inpainting_spatial_name=None,
         inpainting_temporal_interval=None,
         inpainting_camera_index=None,
     )
+
 
 def test_forward(module):
     x = torch.randn(2, 81, 17, 6)
@@ -48,6 +57,7 @@ def test_forward(module):
     assert all(isinstance(o, torch.Tensor) for o in out)
     assert out[0].shape == x.shape
 
+
 def test_sample(module):
     x_shape = (2, 81, 17, 6)
     quat_shape = (2, 4)
@@ -56,6 +66,7 @@ def test_sample(module):
     assert x.shape == x_shape
     assert quat.shape == quat_shape
     assert trans.shape == trans_shape
+
 
 def test_inpaint(module):
     x = torch.randn(2, 81, 17, 6)
@@ -67,6 +78,7 @@ def test_inpaint(module):
     assert quat_out.shape == quat.shape
     assert trans_out.shape == trans.shape
 
+
 def test_training_step_logs(module):
     x = torch.randn(2, 81, 17, 6)
     quat = torch.randn(2, 4)
@@ -75,6 +87,7 @@ def test_training_step_logs(module):
     module.log = MagicMock()
     loss = module.training_step(batch, 0)
     assert module.log.call_count == 1
+
 
 def test_validation_step_logs_and_batches(module):
     x = torch.randn(2, 81, 17, 6)
@@ -88,10 +101,12 @@ def test_validation_step_logs_and_batches(module):
     assert module.log.call_count == 1
     assert len(module.validation_batches) == 1
 
+
 def test_configure_optimizers(module):
     optimizer = module.configure_optimizers()
     assert hasattr(optimizer, "step")
     assert hasattr(optimizer, "zero_grad")
+
 
 def test_process_data_for_logging(module):
     x = [torch.randn(2, 81, 17, 6), torch.randn(2, 81, 17, 6)]
@@ -100,17 +115,21 @@ def test_process_data_for_logging(module):
     assert isinstance(arr_x, (list, torch.Tensor, type(arr_x_gt)))
     assert arr_x.shape == arr_x_gt.shape
 
+
 @patch("bidipose.diffusion.module.vis_pose2d")
 @patch("bidipose.diffusion.module.vis_pose3d")
 def test_log_animation(mock_vis_pose3d, mock_vis_pose2d, module, tmp_path):
     # Setup dummy animations
     class DummyAni:
-        def save(self, path, writer, fps): pass
+        def save(self, path, writer, fps):
+            pass
+
     mock_vis_pose2d.return_value = DummyAni()
     mock_vis_pose3d.return_value = DummyAni()
     module.trainer = MagicMock()
     module.trainer.default_root_dir = str(tmp_path)
     from unittest.mock import PropertyMock
+
     type(module).current_epoch = PropertyMock(return_value=1)
     # Patch the logger property since it has no setter
     mock_logger = MagicMock()
@@ -123,10 +142,6 @@ def test_log_animation(mock_vis_pose3d, mock_vis_pose2d, module, tmp_path):
         quat_gt = [torch.randn(2, 4)]
         trans_gt = [torch.randn(2, 3)]
         module._log_animation(
-            key1="test",
-            key2="test",
-            x=x, quat=quat, trans=trans,
-            x_gt=x_gt, quat_gt=quat_gt, trans_gt=trans_gt
+            key1="test", key2="test", x=x, quat=quat, trans=trans, x_gt=x_gt, quat_gt=quat_gt, trans_gt=trans_gt
         )
         assert mock_logger.log_video.call_count == 2
-        
