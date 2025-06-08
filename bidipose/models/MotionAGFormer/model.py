@@ -367,7 +367,7 @@ class MotionAGFormer(BaseModel):
         graph_only=False,
         neighbour_num=4,
         n_frames=88,
-        timestep_embed_dim: int = 128,
+        timestep_embed_dim: int = 64,
     ):
         """:param n_layers: Number of layers.
         :param dim_in: Input dimension.

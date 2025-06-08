@@ -1,7 +1,7 @@
 name: MotionAGFormer
 params:
-  n_layers: 2
-  dim_feat: 32
+  n_layers: 16
+  dim_feat: 128
   dim_in: 6
   dim_rep: 512
   dim_out: 6
