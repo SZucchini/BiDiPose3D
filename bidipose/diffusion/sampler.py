@@ -227,15 +227,10 @@ class DDPMSampler:
         # Predict x_0 using the model
         x0_pred, quat0_pred, trans0_pred = model(x, quat, trans, torch.full((x.size(0),), t, device=x.device))
 
-        if t > 0:
-            # Perform reverse diffusion step
-            x_prev = self._p_sample(x, x0_pred, t)
-            quat_prev = self._p_sample(quat, quat0_pred, t)
-            trans_prev = self._p_sample(trans, trans0_pred, t)
-        else: # No noise at the last step
-            x_prev = x0_pred  
-            quat_prev = quat0_pred
-            trans_prev = trans0_pred
+        # Perform reverse diffusion step
+        x_prev = self._p_sample(x, x0_pred, t)
+        quat_prev = self._p_sample(quat, quat0_pred, t)
+        trans_prev = self._p_sample(trans, trans0_pred, t)
 
         # Apply masks to fill in the initial data for masked regions
         x_prev = self._masked_fill(x_prev, x_init, x_mask, t-1)
