@@ -148,15 +148,14 @@ class DDPMSampler:
         Returns:
             torch.Tensor: Updated sample after reverse diffusion step.
         """
-        if t > 0:
-            beta = self.betas[t]
-            sigma = torch.sqrt(beta)
-            coef1 = torch.sqrt(self.alphas_cumprod[t - 1])
-            coef2 = torch.sqrt(1.0 - self.alphas_cumprod[t - 1])
-            coef3 = torch.sqrt(self.alphas_cumprod[t])
-            coef4 = torch.sqrt(1.0 - self.alphas_cumprod[t])
+        eps = x - x0_pred
+        sigma = torch.sqrt(self.betas[t])
+        sqrt_alpha = torch.sqrt(self.alphas[t])
+        sqrt_one_minus_alpha_cumprod = torch.sqrt(1.0 - self.alphas_cumprod[t])
+        one_minus_alpha = 1 - self.alphas[t]
 
-            x_mean = coef1 * x0_pred + coef2 * (x - coef3 * x0_pred) / coef4
+        x_mean = (x - eps * one_minus_alpha / sqrt_one_minus_alpha_cumprod) / sqrt_alpha
+        if t > 0:
             noise = torch.randn_like(x)
             return x_mean + sigma * noise
         else:
@@ -176,9 +175,9 @@ class DDPMSampler:
             torch.Tensor: Sample with masked regions filled from initial data.
         """
         if mask is not None and x_init is not None:
-            if t > 0:
+            if t >= 0:
                 t_tensor = torch.full([x.size(0)] + [1] * (x.ndim - 1), t, device=x.device)
-                x_dummy = self._q_sample(x, t_tensor)
+                x_dummy = self._q_sample(x_init, t_tensor)
             else:
                 x_dummy = x_init
             # For masked inpainting, keep known regions from x_init
@@ -210,7 +209,7 @@ class DDPMSampler:
             x (torch.Tensor): Current 2D pose sample.
             quat (torch.Tensor): Current quaternion sample
             trans (torch.Tensor): Current translation sample.
-            t (torch.Tensor): Current timestep.
+            t (int): Current timestep.
             x_mask (Optional[torch.Tensor]): Mask for 2D pose data (1 for keep, 0 for inpaint).
             quat_mask (Optional[torch.Tensor]): Mask for quaternion data (1 for keep, 0 for inpaint).
             trans_mask (Optional[torch.Tensor]): Mask for translation data (1 for keep, 0 for inpaint).
@@ -224,7 +223,7 @@ class DDPMSampler:
             torch.Tensor: Updated translation sample after reverse diffusion step.
         """
         # Predict x_0 using the model
-        x0_pred, quat0_pred, trans0_pred = model(x, quat, trans, t)
+        x0_pred, quat0_pred, trans0_pred = model(x, quat, trans, torch.full((x.size(0),), t, device=x.device))
 
         if t > 0:
             # Perform reverse diffusion step
@@ -237,8 +236,8 @@ class DDPMSampler:
             trans_prev = trans0_pred
 
         # Apply masks to fill in the initial data for masked regions
-        x_prev = self._masked_fill(x_prev, x_init, x_mask, t)
-        quat_prev = self._masked_fill(quat_prev, quat_init, quat_mask, t)
-        trans_prev = self._masked_fill(trans_prev, trans_init, trans_mask, t)
+        x_prev = self._masked_fill(x_prev, x_init, x_mask, t-1)
+        quat_prev = self._masked_fill(quat_prev, quat_init, quat_mask, t-1)
+        trans_prev = self._masked_fill(trans_prev, trans_init, trans_mask, t-1)
 
         return x_prev, quat_prev, trans_prev
