@@ -367,7 +367,7 @@ class MotionAGFormer(BaseModel):
         graph_only=False,
         neighbour_num=4,
         n_frames=88,
-        timestep_embed_dim: int = 128,
+        timestep_embed_dim: int = 64,
     ):
         """:param n_layers: Number of layers.
         :param dim_in: Input dimension.
@@ -465,7 +465,7 @@ class MotionAGFormer(BaseModel):
         quat = quat.unsqueeze(-1)  # (B, 4. 1)
         trans = trans.unsqueeze(-1)  # (B, 3, 1)
 
-        _, frames, joints, _ = x.shape
+        bs, frames, joints, _ = x.shape
         x = self.joints_embed(x)  # (B, T, J, D)
         x = x + self.pos_embed + self.type_embed[0]
 
@@ -478,7 +478,7 @@ class MotionAGFormer(BaseModel):
         if t is not None:
             time_embed = self.time_mlp(t)  # (B, 1, D)
             time_embed = time_embed.unsqueeze(1)  # (B, 1, 1, D)
-            time_embed = time_embed.expand(-1, x.size(1), x.size(2), -1)  # (B, T+7, J, D)
+            time_embed = time_embed.expand(bs, x.size(1), x.size(2), -1)  # (B, T+7, J, D)
             x = x + time_embed
 
         for layer in self.layers:
