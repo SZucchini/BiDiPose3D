@@ -3,6 +3,7 @@ Details of the original repository is as follows:
 - Original repository: https://github.com/TaatiTeam/MotionAGFormer
 """
 
+import math
 from collections import OrderedDict
 
 import torch
@@ -16,6 +17,38 @@ from .modules.attention import Attention
 from .modules.graph import GCN
 from .modules.mlp import MLP
 from .modules.tcn import MultiScaleTCN
+
+
+class SinusoidalPositionEmbeddings(nn.Module):
+    """Sinusoidal position embeddings for timestep encoding."""
+
+    def __init__(self, dim: int):
+        """Initialize sinusoidal position embeddings.
+
+        Args:
+            dim (int): Embedding dimension.
+
+        """
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, time: torch.Tensor) -> torch.Tensor:
+        """Forward pass for sinusoidal position embeddings.
+
+        Args:
+            time (torch.Tensor): Timestep tensor with shape (B,).
+
+        Returns:
+            torch.Tensor: Sinusoidal embeddings with shape (B, dim).
+
+        """
+        device = time.device
+        half_dim = self.dim // 2
+        embeddings = math.log(10000) / (half_dim - 1)
+        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
+        embeddings = time[:, None] * embeddings[None, :]
+        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+        return embeddings
 
 
 class AGFormerBlock(nn.Module):
@@ -334,6 +367,7 @@ class MotionAGFormer(BaseModel):
         graph_only=False,
         neighbour_num=4,
         n_frames=88,
+        timestep_embed_dim: int = 128,
     ):
         """:param n_layers: Number of layers.
         :param dim_in: Input dimension.
@@ -369,6 +403,12 @@ class MotionAGFormer(BaseModel):
         self.trans_linear = nn.Linear(dim_out, 1)
         self.pos_embed = nn.Parameter(torch.zeros(1, num_joints, dim_feat))
         self.type_embed = nn.Parameter(torch.zeros(3, 1, 1, dim_feat))
+        self.time_mlp = nn.Sequential(
+            SinusoidalPositionEmbeddings(timestep_embed_dim),
+            nn.Linear(timestep_embed_dim, timestep_embed_dim * 2),
+            nn.GELU(),
+            nn.Linear(timestep_embed_dim * 2, dim_feat),
+        )
         self.norm = nn.LayerNorm(dim_feat)
         act_layer = getattr(nn, act_layer) if isinstance(act_layer, str) else act_layer
 
@@ -434,7 +474,12 @@ class MotionAGFormer(BaseModel):
         trans = self.trans_embed(trans).unsqueeze(2)  # (B, 3, 1, D)
         trans = trans.expand(-1, -1, joints, -1) + self.pos_embed + self.type_embed[2]  # (B, 3, J, D)
         x = torch.cat((x, quat, trans), dim=1)  # (B, T+7, J, D)
-        # x = x + t  NOTE: It depends on the shape of t.
+
+        if t is not None:
+            time_embed = self.time_mlp(t)  # (B, 1, D)
+            time_embed = time_embed.unsqueeze(1)  # (B, 1, 1, D)
+            time_embed = time_embed.expand(-1, x.size(1), x.size(2), -1)  # (B, T+7, J, D)
+            x = x + time_embed
 
         for layer in self.layers:
             x = layer(x)
