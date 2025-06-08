@@ -90,8 +90,8 @@ class DiffusionLightningModule(pl.LightningModule):
         """
         x, quat, trans = batch
         x = x.to(self.device)
-        quat = quat.to(self.device).unsqueeze(-1)  # Ensure quaternion is of shape (B, 4, 1)
-        trans = trans.to(self.device).unsqueeze(-1)  # Ensure translation is of shape (B, 3, 1)
+        quat = quat.to(self.device)
+        trans = trans.to(self.device)
         t = torch.randint(0, self.sampler.timesteps, (x.size(0),), device=x.device)
         x_noise, quat_noise, trans_noise = self.sampler.q_sample(x, quat, trans, t)
         x_pred, quat_pred, trans_pred = self.forward(x_noise, quat_noise, trans_noise, t)
@@ -212,16 +212,13 @@ class DiffusionLightningModule(pl.LightningModule):
         self, 
         x: Optional[list[torch.Tensor]] = None,
         x_gt: Optional[list[torch.Tensor]] = None,
-        squeeze: bool = False,
     ) -> Tuple[np.ndarray, np.ndarray]:
         assert x is not None or x_gt is not None, "At least one of x or x_gt must be provided."
         if x is not None:
             x = torch.cat(x, dim=0)
-            if squeeze: x = x.squeeze(-1)
             x = x.detach().cpu().numpy()
         if x_gt is not None:
             x_gt = torch.cat(x_gt, dim=0)
-            if squeeze: x_gt = x_gt.squeeze(-1)
             x_gt = x_gt.detach().cpu().numpy()
             if x is None: x = x_gt
         else:
@@ -240,8 +237,8 @@ class DiffusionLightningModule(pl.LightningModule):
         trans_gt: Optional[list[torch.Tensor]] = None,
     ) -> int:
         x, x_gt = self._process_data_for_logging(x, x_gt)
-        quat, quat_gt = self._process_data_for_logging(quat, quat_gt, squeeze=True)
-        trans, trans_gt = self._process_data_for_logging(trans, trans_gt, squeeze=True)
+        quat, quat_gt = self._process_data_for_logging(quat, quat_gt)
+        trans, trans_gt = self._process_data_for_logging(trans, trans_gt)
 
         save_root = self.trainer.default_root_dir
         media_dir = os.path.join(save_root, "media")
@@ -305,8 +302,8 @@ class DiffusionLightningModule(pl.LightningModule):
         if len(self.validation_batches) > 0:
             x, quat, trans = self.validation_batches[0]
             x_shape = x.shape
-            quat_shape = quat.unsqueeze(-1).shape
-            trans_shape = trans.unsqueeze(-1).shape
+            quat_shape = quat.shape
+            trans_shape = trans.shape
 
         # Validate inpainting
         plot_counter = 0
@@ -318,8 +315,8 @@ class DiffusionLightningModule(pl.LightningModule):
             logging.info(f"Processing validation batch {i + 1}/{len(self.validation_batches)} for inpainting...")
             x, quat, trans = batch
             x = x.to(self.device)
-            quat = quat.to(self.device).unsqueeze(-1)  # Ensure quaternion is of shape (B, 4, 1)
-            trans = trans.to(self.device).unsqueeze(-1)  # Ensure translation is of shape (B, 3, 1)
+            quat = quat.to(self.device)
+            trans = trans.to(self.device)
             num_plot = min(self.num_plot_inpaint - plot_counter, x.shape[0])
             plot_counter += num_plot
 

@@ -17,10 +17,10 @@ def test_sampler():
     model = MotionAGFormer(n_layers=2, dim_feat=32, dim_in=6, n_frames=88)
     model.eval()
 
-    x = torch.randn(1, 81, 17, 6)
-    quat = torch.randn(1, 4, 1)
-    trans = torch.randn(1, 3, 1)
-    t = torch.randint(0, timesteps, (1,), device=x.device)
+    x = torch.randn(2, 81, 17, 6)
+    quat = torch.randn(2, 4)
+    trans = torch.randn(2, 3)
+    t = torch.randint(0, timesteps, (2,), device=x.device)
 
     # Test forward process
     x_noise, quat_noise, trans_noise = sampler.q_sample(x, quat, trans, t)
