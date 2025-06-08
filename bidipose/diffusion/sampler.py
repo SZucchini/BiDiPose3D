@@ -132,8 +132,8 @@ class DDPMSampler:
             torch.Tensor: Noised translation data at timestep t.
         """
         x = self._q_sample(x_start, t.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1))
-        quat = self._q_sample(quat_start, t.unsqueeze(-1).unsqueeze(-1))
-        trans = self._q_sample(trans_start, t.unsqueeze(-1).unsqueeze(-1))
+        quat = self._q_sample(quat_start, t.unsqueeze(-1))
+        trans = self._q_sample(trans_start, t.unsqueeze(-1))
         return x, quat, trans
     
     def _p_sample(self, x: torch.Tensor, x0_pred: torch.Tensor, t: int) -> torch.Tensor:

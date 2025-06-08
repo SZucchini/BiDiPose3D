@@ -118,8 +118,6 @@ class StereoCameraDataset(Dataset):
 
         cams, tgts = self.stereo_camera_sampler.sample_camera_and_target(kpts_world)
         quat, trans = self.stereo_camera_sampler.get_relative_pose(cams, tgts)
-        quat = quat.reshape(4, 1)
-        trans = trans.reshape(3, 1)
         x1, x2 = self.stereo_camera_sampler.project_and_normalize(kpts_world, cams, tgts)
         x = np.concatenate([x1, x2], axis=-1)
         return (

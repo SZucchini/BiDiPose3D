@@ -11,15 +11,15 @@ def epipolar_error(
 
     Args:
         x (torch.Tensor): Input 2D poses from two-views (B, T, J, 3*2).
-        quat (torch.Tensor): Quaternions for cam1 to cam2 (B, 4, 1).
-        trans (torch.Tensor): Translations for cam1 to cam2 (B, 3, 1).
+        quat (torch.Tensor): Quaternions for cam1 to cam2 (B, 4).
+        trans (torch.Tensor): Translations for cam1 to cam2 (B, 3).
         mask (torch.Tensor, optional): Mask to apply to the input data (T,J).
 
     Returns:
         torch.Tensor: Epipolar error.
     """
     essential_mat = essential_from_quat_and_trans_batch(
-        quat.squeeze(-1).detach().cpu().numpy(), trans.squeeze(-1).detach().cpu().numpy()
+        quat.detach().cpu().numpy(), trans.detach().cpu().numpy()
     )
     essential_mat = torch.tensor(essential_mat, device=x.device, dtype=x.dtype)
     cam0 = x[:, :, :, :3]
@@ -52,8 +52,8 @@ def camera_direction_error(trans_pred: torch.Tensor, trans_gt: torch.Tensor) -> 
     """
     Compute the camera direction error between predicted and ground truth translations.
     Args:
-        trans_pred (torch.Tensor): Predicted translations (B, 3, 1).
-        trans_gt (torch.Tensor): Ground truth translations (B, 3, 1).
+        trans_pred (torch.Tensor): Predicted translations (B, 3).
+        trans_gt (torch.Tensor): Ground truth translations (B, 3).
     Returns:
         torch.Tensor: Mean squared error of the camera direction.
     """
@@ -65,22 +65,22 @@ def _quaternion_conjugate(q: torch.Tensor) -> torch.Tensor:
     """
     Compute the conjugate of a quaternion.
     Args:
-        q (torch.Tensor): Quaternion tensor of shape (B, 4, 1).
+        q (torch.Tensor): Quaternion tensor of shape (B, 4).
     Returns:
-        torch.Tensor: Conjugate quaternion tensor of shape (B, 4, 1).
+        torch.Tensor: Conjugate quaternion tensor of shape (B, 4).
     """
     coef = torch.tensor([1.0, -1.0, -1.0, -1.0], device=q.device, dtype=q.dtype)
-    q = q * coef.view(4, 1)  # Apply conjugate to each quaternion
+    q = q * coef
     return q
 
 def _quaternion_multiply(q1: torch.Tensor, q2: torch.Tensor) -> torch.Tensor:
     """
     Multiply two quaternions.
     Args:
-        q1 (torch.Tensor): First quaternion (B, 4, 1).
-        q2 (torch.Tensor): Second quaternion (B, 4, 1).
+        q1 (torch.Tensor): First quaternion (B, 4).
+        q2 (torch.Tensor): Second quaternion (B, 4).
     Returns:
-        torch.Tensor: Resulting quaternion (B, 4, 1).
+        torch.Tensor: Resulting quaternion (B, 4).
     """
     w1, x1, y1, z1 = q1[:, 0], q1[:, 1], q1[:, 2], q1[:, 3]
     w2, x2, y2, z2 = q2[:, 0], q2[:, 1], q2[:, 2], q2[:, 3]
@@ -98,8 +98,8 @@ def camera_rotation_error(quat_pred: torch.Tensor, quat_gt: torch.Tensor) -> tor
     Compute the camera rotation error between predicted and ground truth quaternions.
     
     Args:
-        quat_pred (torch.Tensor): Predicted quaternions (B, 4, 1).
-        quat_gt (torch.Tensor): Ground truth quaternions (B, 4, 1).
+        quat_pred (torch.Tensor): Predicted quaternions (B, 4).
+        quat_gt (torch.Tensor): Ground truth quaternions (B, 4).
     
     Returns:
         torch.Tensor: Mean squared error of the camera rotation.

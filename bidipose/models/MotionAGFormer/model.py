@@ -411,17 +411,20 @@ class MotionAGFormer(BaseModel):
 
         Args:
             x (torch.Tensor): Input 2D from two-views (B, T, J, C=3*2).
-            quat (torch.Tensor): Quaternions for cam1 to cam2 (B, 4, 1).
-            trans (torch.Tensor): Translation vector for cam1 to cam2 (B, 3, 1).
+            quat (torch.Tensor): Quaternions for cam1 to cam2 (B, 4).
+            trans (torch.Tensor): Translation vector for cam1 to cam2 (B, 3).
             t (torch.Tensor): Time step embedding.  # NOTE: We need to decide the shape.
             return_rep (bool): If True, returns the representation logits instead of the final output.
 
         Returns:
             pred_pose (torch.Tensor): Predicted 2D poses from 2 views (B, T, J, 3*2).
-            pred_quat (torch.Tensor): Predicted quaternion (B, 4, 1).
-            pred_trans (torch.Tensor): Predicted translation (B, 3, 1).
+            pred_quat (torch.Tensor): Predicted quaternion (B, 4).
+            pred_trans (torch.Tensor): Predicted translation (B, 3).
 
         """
+        quat = quat.unsqueeze(-1)  # (B, 4. 1)
+        trans = trans.unsqueeze(-1)  # (B, 3, 1)
+
         _, frames, joints, _ = x.shape
         x = self.joints_embed(x)  # (B, T, J, D)
         x = x + self.pos_embed + self.type_embed[0]
@@ -453,4 +456,8 @@ class MotionAGFormer(BaseModel):
         pred_trans = x[:, frames + 4 :, :, :].mean(dim=2)  # (B, 3, D_out)
         pred_trans = self.trans_linear(pred_trans)  # (B, 3, 1)
         pred_trans = F.normalize(pred_trans, dim=1)
+
+        pred_quat = pred_quat.squeeze(-1)  # (B, 4)
+        pred_trans = pred_trans.squeeze(-1)  # (B, 3)
+
         return pred_pose, pred_quat, pred_trans

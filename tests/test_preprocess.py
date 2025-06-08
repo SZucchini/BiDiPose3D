@@ -2,7 +2,7 @@
 
 import pytest
 
-from bidipose.preprocess.sampler import StereoCameraSampler
+from bidipose.preprocess.camera_sampler import StereoCameraSampler
 from bidipose.preprocess.utils import get_kpts_from_cdf
 
 
