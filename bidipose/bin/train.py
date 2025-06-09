@@ -1,14 +1,14 @@
 import hydra
-from omegaconf import DictConfig
 import pytorch_lightning as pl
+from omegaconf import DictConfig
 from pytorch_lightning import Trainer
-from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import WandbLogger
 
-from bidipose.datasets.datamodule import StereoCameraDataModule
 import bidipose.models as models
-from bidipose.diffusion.sampler import DDPMSampler
+from bidipose.datasets.datamodule import StereoCameraDataModule
 from bidipose.diffusion.module import DiffusionLightningModule
+from bidipose.diffusion.sampler import DDPMSampler
 
 # Here is an example directory structure for storing Hydra configuration files.
 # Typically, you create a `configs` directory at the project root and place various config files inside.
@@ -41,26 +41,28 @@ from bidipose.diffusion.module import DiffusionLightningModule
 #   - trainer: trainer
 #   - local: local
 
+
 # You define detailed parameters in each subdirectory's yaml file.
-@hydra.main(config_path='../../configs', config_name='config')
+@hydra.main(config_path="../../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
-    """
-    Main training routine using Hydra for hyperparameter management.
+    """Main training routine using Hydra for hyperparameter management.
 
     Args:
         cfg (DictConfig): Configuration composed by Hydra.
+
     """
     # fix seed for reproducibility
     pl.seed_everything(cfg.seed, workers=True)
 
     # DataModule
     datamodule = StereoCameraDataModule(
-        data_root=cfg.local.data_root,
+        h36m_root=cfg.local.h36m_root,
+        hml3d_root=cfg.local.hml3d_root,
         data_name=cfg.data.data_name,
         batch_size=cfg.data.batch_size,
-        num_workers=cfg.data.num_workers
+        num_workers=cfg.data.num_workers,
     )
-    
+
     # Model
     model = getattr(models, cfg.model.name)(**cfg.model.params)
 
@@ -68,37 +70,23 @@ def main(cfg: DictConfig) -> None:
     sampler = DDPMSampler(
         beta_scheduler_name=cfg.sampler.beta_scheduler_name,
         beta_scheduler_params=cfg.sampler.beta_scheduler_params,
-        device=cfg.sampler.device
+        device=cfg.sampler.device,
     )
 
     # Lightning Module
-    module = DiffusionLightningModule(
-        model=model,
-        sampler=sampler,
-        **cfg.module
-    )
+    module = DiffusionLightningModule(model=model, sampler=sampler, **cfg.module)
 
     # WandbLogger
-    wandb_logger = WandbLogger(
-        project=cfg.logger.project,
-        name=cfg.logger.name,
-        save_dir=cfg.logger.save_dir
-    )
+    wandb_logger = WandbLogger(project=cfg.logger.project, name=cfg.logger.name, save_dir=cfg.logger.save_dir)
 
     checkpoint_callback = ModelCheckpoint(**cfg.checkpoint)
 
     # Trainer
-    trainer = Trainer(
-        logger=wandb_logger,
-        callbacks=[checkpoint_callback],
-        **cfg.trainer
-    )
+    trainer = Trainer(logger=wandb_logger, callbacks=[checkpoint_callback], **cfg.trainer)
 
     # Start training
-    trainer.fit(
-        module,
-        datamodule=datamodule
-    )
+    trainer.fit(module, datamodule=datamodule)
+
 
 if __name__ == "__main__":
     main()

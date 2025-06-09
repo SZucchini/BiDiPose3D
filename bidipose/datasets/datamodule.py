@@ -9,18 +9,22 @@ from bidipose.datasets.dataset import StereoCameraDataset
 class StereoCameraDataModule(pl.LightningDataModule):
     """DataModule for StereoCameraDataset."""
 
-    def __init__(self, data_root: str, data_name: str = "H36M", batch_size: int = 32, num_workers: int = 4):
+    def __init__(
+        self, h36m_root: str, hml3d_root: str, data_name: str = "H36M", batch_size: int = 32, num_workers: int = 4
+    ):
         """Initialize the StereoCameraDataModule.
 
         Args:
-            data_root (str): Root directory of the dataset.
+            h36m_root (str): Root directory of the Human3.6M dataset.
+            hml3d_root (str): Root directory of the HumanML3D dataset.
             data_name (str): Name of the dataset, either "H36M" or "HML3D".
             batch_size (int): Batch size for training and validation.
             num_workers (int): Number of workers for data loading.
 
         """
         super().__init__()
-        self.data_root = data_root
+        self.h36m_root = h36m_root
+        self.hml3d_root = hml3d_root
         self.data_name = data_name
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -34,26 +38,30 @@ class StereoCameraDataModule(pl.LightningDataModule):
         """
         if stage == "fit" or stage is None:
             self.train_dataset = StereoCameraDataset(
-                data_root=self.data_root,
+                h36m_root=self.h36m_root,
+                hml3d_root=self.hml3d_root,
                 data_name=self.data_name,
                 split="train",
             )
             self.valid_dataset = StereoCameraDataset(
-                data_root=self.data_root,
+                h36m_root=self.h36m_root,
+                hml3d_root=self.hml3d_root,
                 data_name=self.data_name,
                 split="test",
             )
 
         if stage == "validate":
             self.valid_dataset = StereoCameraDataset(
-                data_root=self.data_root,
+                h36m_root=self.h36m_root,
+                hml3d_root=self.hml3d_root,
                 data_name=self.data_name,
                 split="test",
             )
 
         if stage == "test":
             self.test_dataset = StereoCameraDataset(
-                data_root=self.data_root,
+                h36m_root=self.h36m_root,
+                hml3d_root=self.hml3d_root,
                 data_name=self.data_name,
                 split="test",
             )
