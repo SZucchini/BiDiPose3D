@@ -16,6 +16,7 @@ class DummyModel(torch.nn.Module):
 
 class DummySampler:
     timesteps = 10
+    predict_x0 = True
 
     def q_sample(self, x, quat, trans, t):
         return x + 0.1, quat + 0.1, trans + 0.1
@@ -25,6 +26,12 @@ class DummySampler:
         quat = torch.zeros(quat_shape)
         trans = torch.zeros(trans_shape)
         return x, quat, trans
+    
+    def clean_to_noise(self, x, x_noisy, t):
+        return x_noisy - x + 0.1
+    
+    def noise_to_clean(self, x_noisy, t):
+        return x_noisy - 0.1
 
 
 @pytest.fixture
