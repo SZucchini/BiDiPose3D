@@ -74,7 +74,8 @@ def vis_pose2d(
         ax.clear()
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
-        # ax.invert_yaxis()
+        ax.invert_xaxis()
+        ax.invert_yaxis()
 
         if gt is not None:
             ax.plot(gt[:, 0], gt[:, 1], "k.", label="GT", markersize=5, alpha=0.5)
