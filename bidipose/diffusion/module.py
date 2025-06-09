@@ -80,14 +80,14 @@ class DiffusionLightningModule(pl.LightningModule):
         """
         return self.model.forward(x, quat, trans, t)
 
-    def criterion(self, batch: Any) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def criterion(self, batch: Any) -> torch.Tensor:
         """Compute the loss for a batch.
 
         Args:
             batch (Any): Batch data.
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: Loss and individual component losses.
+            torch.Tensor: Loss value.
 
         """
         x, quat, trans = batch
@@ -95,25 +95,38 @@ class DiffusionLightningModule(pl.LightningModule):
         quat = quat.to(self.device)
         trans = trans.to(self.device)
         t = torch.randint(0, self.sampler.timesteps, (x.size(0),), device=x.device)
-        x_noise, quat_noise, trans_noise = self.sampler.q_sample(x, quat, trans, t)
-        x_pred, quat_pred, trans_pred = self.forward(x_noise, quat_noise, trans_noise, t)
-        pred = torch.cat(
-            [
-                x_pred.flatten(),
-                quat_pred.flatten(),
-                trans_pred.flatten(),
-            ],
-            dim=-1,
-        )
+        x_noisy, quat_noisy, trans_noisy = self.sampler.q_sample(x, quat, trans, t)
+        x_pred, quat_pred, trans_pred = self.forward(x_noisy, quat_noisy, trans_noisy, t)
         gt = torch.cat(
             [
-                x.flatten(),
-                quat.flatten(),
-                trans.flatten(),
+                x.flatten(1),
+                quat.flatten(1),
+                trans.flatten(1),
             ],
             dim=-1,
         )
-        loss = self.loss_fn(pred, gt)
+        noisy = torch.cat(
+            [
+                x_noisy.flatten(1),
+                quat_noisy.flatten(1),
+                trans_noisy.flatten(1),
+            ],
+            dim=-1,
+        )
+        pred = torch.cat(
+            [
+                x_pred.flatten(1),
+                quat_pred.flatten(1),
+                trans_pred.flatten(1),
+            ],
+            dim=-1,
+        )
+        noise_gt = self.sampler.clean_to_noise(gt, noisy, t)
+        if self.sampler.prediction_type == "x0":
+            noise_pred = self.sampler.clean_to_noise(pred, noisy, t)
+        else:
+            noise_pred = pred
+        loss = self.loss_fn(noise_pred, noise_gt)
         return loss
 
     def sample(
