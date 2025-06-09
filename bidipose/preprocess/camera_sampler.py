@@ -8,10 +8,9 @@ class StereoCameraSampler:
 
     def __init__(
         self,
-        distance_factor: float = 3.0,
-        baseline_angle_range: tuple[float, float] = (45.0, 135.0),
-        height_tol_ratio: float = 0.17,
-        min_polar_angle_deg: float = 40.0,
+        dmin_factor: float = 1.5,
+        dmax_factor: float = 3.0,
+        baseline_angle_range: tuple[float, float] = (60.0, 120.0),
         rng: np.random.Generator | None = None,
         max_iter: int = 10000,
     ) -> None:
@@ -26,10 +25,9 @@ class StereoCameraSampler:
             max_iter (int): Maximum number of iterations to sample camera and target positions.
 
         """
-        self.distance_factor = distance_factor
+        self.dmin_factor = dmin_factor
+        self.dmax_factor = dmax_factor
         self.baseline_angle_range = baseline_angle_range
-        self.height_tol_ratio = height_tol_ratio
-        self.min_polar_angle_deg = min_polar_angle_deg
         self.img_size_options = [
             (3840, 2160),
             (1920, 1080),
@@ -95,6 +93,14 @@ class StereoCameraSampler:
     ) -> np.ndarray:
         return self._camera_to_image(self._world_to_camera(kpts_world, cam_pos, rot), intrinsics)
 
+    def _lift(self, ground_vec: np.ndarray, elev_rad: float) -> np.ndarray:
+        d = np.linalg.norm(ground_vec)
+        if d == 0:
+            return ground_vec
+        horiz = ground_vec * np.cos(elev_rad)
+        vert = np.array([0.0, 0.0, d * np.sin(elev_rad)], float)
+        return horiz + vert
+
     def sample_camera_and_target(self, kpts_world: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Sample camera and target positions based on the keypoints in the world coordinate system.
 
@@ -108,61 +114,44 @@ class StereoCameraSampler:
         max_retry = 1000
         for retry_count in range(max_retry):
             try:
-                pts = np.asarray(kpts_world, np.float64).reshape(-1, 3)
-                min_xyz, max_xyz = pts.min(0), pts.max(0)
-                centre = 0.5 * (min_xyz + max_xyz)
+                pts = kpts_world.reshape(-1, 3)
+                centre = 0.5 * (pts.min(0) + pts.max(0))
                 radius = np.linalg.norm(pts - centre, axis=1).max()
 
                 self.img_size = self.rng.choice(self.img_size_options)
-                width, height = self.img_size
-                aspect = width / height
+                aspect = self.img_size[0] / self.img_size[1]
+                h_fov = np.deg2rad(self.rng.uniform(*self.fov_range_deg))
+                v_fov = 2 * np.arctan(np.tan(h_fov / 2) / aspect)
+                self.intrinsics = np.stack([self._sample_intrinsics(self.img_size, h_fov) for _ in range(2)])
 
-                fov_deg = self.rng.uniform(*self.fov_range_deg)
-                fov_rad = np.deg2rad(fov_deg)
-                h_fov_rad = fov_rad  # consider horizontal fov
-                v_fov_rad = 2 * np.arctan(np.tan(h_fov_rad / 2) / aspect)
-                self.intrinsics = np.stack([self._sample_intrinsics(self.img_size, h_fov_rad) for _ in range(2)])
-
-                min_fov_rad = min(h_fov_rad, v_fov_rad)
-                d_min = radius / np.tan(min_fov_rad / 2)
-                d_max = d_min * self.distance_factor
-                cam_distance = self.rng.uniform(d_min, d_max, size=(2, 1))
-
-                ang_min_rad = np.deg2rad(self.baseline_angle_range[0])
-                ang_max_rad = np.deg2rad(self.baseline_angle_range[1])
-                theta_min = np.deg2rad(self.min_polar_angle_deg)
-                cos_theta_max = np.cos(theta_min)
-
+                min_fov = min(h_fov, v_fov)
+                d_min = max(radius * self.dmin_factor, radius / np.tan(min_fov / 2))
+                d_max = radius * self.dmax_factor
+                baseline_min, baseline_max = map(np.deg2rad, self.baseline_angle_range)
                 for _ in range(self.max_iter):
-                    dirs = []
-                    for _ in range(2):
-                        phi = self.rng.uniform(0.0, 2.0 * np.pi)
-                        cos_theta = self.rng.uniform(0.0, cos_theta_max)
-                        sin_theta = np.sqrt(1.0 - cos_theta**2)
-                        dirs.append([sin_theta * np.cos(phi), sin_theta * np.sin(phi), cos_theta])
-                    dirs = np.asarray(dirs)
+                    d1, d2 = self.rng.uniform(d_min, d_max, size=2)
+                    phi1 = self.rng.uniform(0, 2 * np.pi)
+                    g_vec1 = np.array([np.cos(phi1), np.sin(phi1), 0.0], float) * d1
+                    theta1 = np.deg2rad(self.rng.uniform(-5.0, 45.0))
+                    cam1 = centre + self._lift(g_vec1, theta1)
 
-                    dot = np.clip(np.dot(dirs[0], dirs[1]), -1.0, 1.0)
-                    angle = np.arccos(dot)
-                    if not (ang_min_rad <= angle <= ang_max_rad):
+                    delta = self.rng.uniform(baseline_min, baseline_max)
+                    if self.rng.random() < 0.5:
+                        delta = -delta
+                    phi2 = phi1 + delta
+                    g_vec2 = np.array([np.cos(phi2), np.sin(phi2), 0.0], float) * d2
+                    theta2 = np.deg2rad(self.rng.uniform(-5.0, 45.0))
+                    cam2 = centre + self._lift(g_vec2, theta2)
+
+                    dirs = self.rng.normal(0.0, 1.0, size=(2, 3))
+                    dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
+                    dists = self.rng.uniform(0.0, radius, size=(2, 1))
+                    tgts = centre + dirs * dists
+
+                    if self._check_is_inside_image(kpts_world, np.stack((cam1, cam2)), tgts):
+                        return np.stack((cam1, cam2)).astype(np.float32), tgts.astype(np.float32)
+                    else:
                         continue
-
-                    cam_pos = centre + cam_distance * dirs
-                    baseline = np.linalg.norm(cam_pos[0] - cam_pos[1])
-                    height_tol = self.height_tol_ratio * baseline
-                    height_diff = abs(cam_pos[0, 2] - cam_pos[1, 2])
-                    if height_diff > height_tol:
-                        continue
-
-                    tgt_dirs = self.rng.normal(0.0, 1.0, size=(2, 3))
-                    tgt_dirs /= np.linalg.norm(tgt_dirs, axis=1, keepdims=True)
-                    tgt_dists = self.rng.uniform(0.0, radius, size=(2, 1))
-                    tgt_pos = centre + tgt_dirs * tgt_dists
-
-                    if not self._check_is_inside_image(kpts_world, cam_pos, tgt_pos):
-                        continue
-
-                    return cam_pos.astype(np.float32), tgt_pos.astype(np.float32)
 
             except Exception as e:
                 if retry_count == max_retry - 1:
