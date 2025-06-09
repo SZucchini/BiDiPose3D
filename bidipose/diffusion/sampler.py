@@ -11,7 +11,9 @@ class DDPMSampler:
     DDPMSampler performs sampling from a diffusion model, supporting mask inpainting.
 
     Args:
-        betas (torch.Tensor): Beta values for the noise schedule (1D tensor).
+        beta_scheduler_name (str): Name of the beta scheduler to use.
+        beta_scheduler_params (dict): Parameters for the beta scheduler.
+        predict_x0 (bool): Whether the model predicts x0 or noise.
         device (Optional[torch.device]): Device for computation.
 
     Attributes:
@@ -20,6 +22,7 @@ class DDPMSampler:
         alphas (torch.Tensor): 1 - betas.
         alphas_cumprod (torch.Tensor): Cumulative product of alphas.
         device (torch.device): Device for computation.
+        predict_x0 (bool): Whether the model predicts x0 or noise.
     """
 
     def __init__(
@@ -33,7 +36,9 @@ class DDPMSampler:
         Initialize DDPMSampler.
 
         Args:
-            betas (torch.Tensor): Beta values for the noise schedule (1D tensor).
+            beta_scheduler_name (str): Name of the beta scheduler to use.
+            beta_scheduler_params (dict): Parameters for the beta scheduler.
+            predict_x0 (bool): Whether the model predicts x0 or noise.
             device (Optional[torch.device]): Device for computation.
         """
         self.device = device if device is not None else torch.device('cpu')
@@ -126,7 +131,7 @@ class DDPMSampler:
             t (torch.Tensor): Current timestep.
 
         Returns:
-            torch.Tensor: Noised data at timestep t.
+            torch.Tensor: Noise at timestep t.
         """
         t = self._adjust_dimensions(x_noisy, t)
         sqrt_alpha_cumprod = torch.sqrt(self.alphas_cumprod[t])

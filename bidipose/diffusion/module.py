@@ -80,14 +80,14 @@ class DiffusionLightningModule(pl.LightningModule):
         """
         return self.model.forward(x, quat, trans, t)
 
-    def criterion(self, batch: Any) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    def criterion(self, batch: Any) -> torch.Tensor:
         """Compute the loss for a batch.
 
         Args:
             batch (Any): Batch data.
 
         Returns:
-            tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: Loss and individual component losses.
+            torch.Tensor: Loss value.
 
         """
         x, quat, trans = batch
