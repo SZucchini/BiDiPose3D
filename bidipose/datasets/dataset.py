@@ -93,7 +93,7 @@ class StereoCameraDataset(Dataset):
             elif file.endswith(".npy"):
                 kpts = np.load(file)
 
-            clips = split_clips(len(kpts), clip_length=81, stride=81)
+            clips = split_clips(len(kpts), clip_length=81, stride=81 // 9)
             for clip in clips:
                 index.append((i, clip))
         return index
