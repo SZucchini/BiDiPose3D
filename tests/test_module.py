@@ -16,7 +16,7 @@ class DummyModel(torch.nn.Module):
 
 class DummySampler:
     timesteps = 10
-    predict_x0 = True
+    prediction_type = "x0"
 
     def q_sample(self, x, quat, trans, t):
         return x + 0.1, quat + 0.1, trans + 0.1
