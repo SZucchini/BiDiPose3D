@@ -261,11 +261,11 @@ class DiffusionLightningModule(pl.LightningModule):
                 f"2d_{key1.replace('/', '_')}_{key1.replace('/', '_')}_epoch_{self.current_epoch:03d}_{i}.mp4"
             )
             video_path_2d = os.path.join(media_dir, filename_2d)
-            ani = vis_pose2d(
+            vis_pose2d(
                 pred_pose=s_x,
                 gt_pose=s_x_gt,
+                save_path=video_path_2d,
             )
-            ani.save(video_path_2d, writer="ffmpeg", fps=30)
             paths_2d.append(video_path_2d)
 
             # Log 3D pose animation
@@ -273,15 +273,15 @@ class DiffusionLightningModule(pl.LightningModule):
                 f"3d_{key1.replace('/', '_')}_{key2.replace('/', '_')}_epoch_{self.current_epoch:03d}_{i}.mp4"
             )
             video_path_3d = os.path.join(media_dir, filename_3d)
-            ani = vis_pose3d(
+            vis_pose3d(
                 pred_pose=s_x,
                 pred_quat=s_quat,
                 pred_trans=s_trans,
                 gt_pose=s_x_gt,
                 gt_quat=s_quat_gt,
                 gt_trans=s_trans_gt,
+                save_path=video_path_3d,
             )
-            ani.save(video_path_3d, writer="ffmpeg", fps=30)
             paths_3d.append(video_path_3d)
         logging.info(f"Saved {len(paths_2d)} 2D and {len(paths_3d)} 3D animations for key: {key1}/{key2}")
 
