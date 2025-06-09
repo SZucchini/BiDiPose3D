@@ -58,32 +58,35 @@ def vis_pose3d(
     """
     gt_pose3d = None
     pred_pose3d = triangulate_points(pred_pose[:, :, :3], pred_pose[:, :, 3:], pred_quat, pred_trans)
+    pred_pose3d[:, :, 2] *= -1
     if gt_pose is not None and gt_quat is not None and gt_trans is not None:
         gt_pose3d = triangulate_points(gt_pose[:, :, :3], gt_pose[:, :, 3:], gt_quat, gt_trans)
+        gt_pose3d[:, :, 2] *= -1
 
     fig = plt.figure(figsize=(10, 10))
     fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
     ax = fig.add_subplot(111, projection="3d")
 
+    if gt_pose3d is not None:
+        xmin = np.min(gt_pose3d[:, :, 0]) - 0.1
+        xmax = np.max(gt_pose3d[:, :, 0]) + 0.1
+        ymin = np.min(gt_pose3d[:, :, 1]) - 0.1
+        ymax = np.max(gt_pose3d[:, :, 1]) + 0.1
+        zmin = np.min(gt_pose3d[:, :, 2]) - 0.1
+        zmax = np.max(gt_pose3d[:, :, 2]) + 0.1
+    else:
+        xmin = np.min(pred_pose3d[:, :, 0]) - 0.1
+        xmax = np.max(pred_pose3d[:, :, 0]) + 0.1
+        ymin = np.min(pred_pose3d[:, :, 1]) - 0.1
+        ymax = np.max(pred_pose3d[:, :, 1]) + 0.1
+        zmin = np.min(pred_pose3d[:, :, 2]) - 0.1
+        zmax = np.max(pred_pose3d[:, :, 2]) + 0.1
+
     def draw_skeleton(ax: plt.Axes, pred_pose3d: np.ndarray, gt_pose3d: np.ndarray | None = None) -> None:
         """Draw skeleton."""
-        if gt_pose3d is not None:
-            xmin = np.min(gt_pose3d[:, 0]) - 0.1
-            xmax = np.max(gt_pose3d[:, 0]) + 0.1
-            ymin = np.min(gt_pose3d[:, 1]) - 0.1
-            ymax = np.max(gt_pose3d[:, 1]) + 0.1
-            zmin = np.min(gt_pose3d[:, 2]) - 0.1
-            zmax = np.max(gt_pose3d[:, 2]) + 0.1
-        else:
-            xmin = np.min(pred_pose3d[:, 0]) - 0.1
-            xmax = np.max(pred_pose3d[:, 0]) + 0.2
-            ymin = np.min(pred_pose3d[:, 1]) - 0.2
-            ymax = np.max(pred_pose3d[:, 1]) + 0.2
-            zmin = np.min(pred_pose3d[:, 2]) - 0.2
-            zmax = np.max(pred_pose3d[:, 2]) + 0.2
         ax.clear()
         ax.set_title(title)
-        ax.view_init(elev=-90, azim=0)
+        ax.view_init(elev=-90, azim=-90)
         ax.set_xlim(xmin, xmax)
         ax.set_ylim(ymin, ymax)
         ax.set_zlim(zmin, zmax)

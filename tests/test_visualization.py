@@ -34,8 +34,8 @@ def test_vis_pose3d(stereo_camera_dataset):
     # Get a sample from the dataset
     pose, quat, trans = stereo_camera_dataset[1]
     pose = np.array(pose)
-    quat = np.array(quat).squeeze(-1)
-    trans = np.array(trans).squeeze(-1)
+    quat = np.array(quat)
+    trans = np.array(trans)
     noise = 0.01
     pred_pose = pose + noise
     pred_pose[:, 0, :] = pose[:, 0, :]
