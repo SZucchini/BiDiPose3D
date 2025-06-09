@@ -13,19 +13,27 @@ from bidipose.preprocess.utils import get_kpts_from_cdf, get_kpts_from_npy, spli
 class StereoCameraDataset(Dataset):
     """Dataset for stereo camera keypoints from Human3.6M or HML3D datasets."""
 
-    def __init__(self, data_root: str, data_name: str = "H36M", split: str = "train"):
+    def __init__(self, h36m_root: str, hml3d_root: str, data_name: str = "H36M", split: str = "train"):
         """Initialize the StereoCameraDataset.
 
         Args:
-            data_root (str): Root directory of the dataset.
-            data_name (str): Name of the dataset, either "H36M" or "HML3D".
+            h36m_root (str): Root directory of the Human3.6M dataset.
+            hml3d_root (str): Root directory of the HumanML3D dataset.
+            data_name (str): Name of the dataset, either "H36M" or "HML3D" or "MIX.
             split (str): Split of the dataset, either "train" or "test". Only used for H36M dataset.
 
         """
         if data_name == "H36M":
-            self.data_files = self._load_h36m_files(data_root, split)
+            self.data_files = self._load_h36m_files(h36m_root, split)
         elif data_name == "HML3D":
-            self.data_files = self._load_hml3d_files(data_root)
+            self.data_files = self._load_hml3d_files(hml3d_root)
+        elif data_name == "MIX":
+            if split == "train":
+                h36m_files = self._load_h36m_files(h36m_root, split)
+                hml3d_files = self._load_hml3d_files(hml3d_root)
+                self.data_files = h36m_files + hml3d_files
+            else:
+                self.data_files = self._load_h36m_files(h36m_root, split)
         else:
             raise ValueError(f"Unsupported dataset name: {data_name}")
         self.index = self._create_index()
