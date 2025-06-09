@@ -148,6 +148,7 @@ def quat_to_rot_batch(quat: np.ndarray) -> np.ndarray:
     """
     if quat.ndim == 3 and quat.shape[-1] == 1:
         quat = quat.squeeze(-1)
+    quat = quat / np.linalg.norm(quat, axis=1, keepdims=True)
     w = quat[:, 0]
     x = quat[:, 1]
     y = quat[:, 2]
@@ -183,6 +184,7 @@ def essential_from_quat_and_trans_batch(quat: np.ndarray, trans: np.ndarray) -> 
     """
     if trans.ndim == 3 and trans.shape[-1] == 1:
         trans = trans.squeeze(-1)
+    trans = trans / np.linalg.norm(trans, axis=1, keepdims=True)
 
     rot = quat_to_rot_batch(quat)
     tx = trans[:, 0]
@@ -212,6 +214,7 @@ def quat_to_rot(quat: np.ndarray) -> np.ndarray:
         np.ndarray: Rotation matrix of shape (3, 3).
 
     """
+    quat = quat / np.linalg.norm(quat)
     w, x, y, z = quat
     return np.array(
         [
@@ -248,6 +251,7 @@ def triangulate_points(
     x2 = x2.reshape(-1, 3)
     points = x1.shape[0]
 
+    trans = trans / np.linalg.norm(trans)
     rot = quat_to_rot(quat)
     rot_x1 = x1.dot(rot.T)
     a = np.cross(x2, rot_x1, axis=1)
