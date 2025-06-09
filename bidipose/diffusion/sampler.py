@@ -13,7 +13,7 @@ class DDPMSampler:
     Args:
         beta_scheduler_name (str): Name of the beta scheduler to use.
         beta_scheduler_params (dict): Parameters for the beta scheduler.
-        predict_x0 (bool): Whether the model predicts x0 or noise.
+        prediction_type (str): Type of prediction ('x0' or 'noise').
         device (Optional[torch.device]): Device for computation.
 
     Attributes:
@@ -22,14 +22,14 @@ class DDPMSampler:
         alphas (torch.Tensor): 1 - betas.
         alphas_cumprod (torch.Tensor): Cumulative product of alphas.
         device (torch.device): Device for computation.
-        predict_x0 (bool): Whether the model predicts x0 or noise.
+        prediction_type (str): Type of prediction ('x0' or 'noise').
     """
 
     def __init__(
         self,
         beta_scheduler_name: str,
         beta_scheduler_params: dict,
-        predict_x0: bool = True,
+        prediction_type: str = 'x0',
         device: Optional[torch.device] = None
     ) -> None:
         """
@@ -42,7 +42,7 @@ class DDPMSampler:
             device (Optional[torch.device]): Device for computation.
         """
         self.device = device if device is not None else torch.device('cpu')
-        self.predict_x0 = predict_x0
+        self.prediction_type = prediction_type
         self.betas = getattr(scheduler, beta_scheduler_name)(**beta_scheduler_params).to(self.device)
         self.alphas, self.alphas_cumprod = scheduler.beta_to_alpha(self.betas)
         self.timesteps = self.betas.shape[0]
@@ -298,7 +298,7 @@ class DDPMSampler:
         # Predict data using the model
         x_pred, quat_pred, trans_pred = model(x, quat, trans, t_tensor)
         # Convert predictions to noise
-        if self.predict_x0:
+        if self.prediction_type == 'x0':
             x_noise = self.clean_to_noise(x_pred, x, t_tensor)
             quat_noise = self.clean_to_noise(quat_pred, quat, t_tensor)
             trans_noise = self.clean_to_noise(trans_pred, trans, t_tensor)

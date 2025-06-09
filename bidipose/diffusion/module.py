@@ -122,7 +122,7 @@ class DiffusionLightningModule(pl.LightningModule):
             dim=-1,
         )
         noise_gt = self.sampler.clean_to_noise(gt, noisy, t)
-        if self.sampler.predict_x0:
+        if self.sampler.prediction_type == "x0":
             noise_pred = self.sampler.clean_to_noise(pred, noisy, t)
         else:
             noise_pred = pred

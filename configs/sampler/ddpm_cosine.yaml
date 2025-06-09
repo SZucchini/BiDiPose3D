@@ -3,3 +3,4 @@ beta_scheduler_params:
   timesteps: 1000
   s: 0.008
 device: cuda
+prediction_type: x0
