@@ -39,6 +39,7 @@ def vis_pose3d(
     gt_pose: np.ndarray | None = None,
     gt_quat: np.ndarray | None = None,
     gt_trans: np.ndarray | None = None,
+    save_path: str | None = None,
     title: str = "3D Pose Visualization",
 ):
     """Visualize 3D pose tringulation results.
@@ -50,6 +51,7 @@ def vis_pose3d(
         gt_pose (np.ndarray | None): Ground truth 2D poses from two-views (T, J, 3*2).
         gt_quat (np.ndarray | None): Ground truth quaternions for cam1 to cam2 (4,).
         gt_trans (np.ndarray | None): Ground truth translations for cam1 to cam2 (3,).
+        save_path (str | None): Path to save the animation. If None, the animation is returned.
         title (str): Title of the plot.
 
     Returns:
@@ -123,4 +125,9 @@ def vis_pose3d(
         interval=30,
         repeat=False,
     )
-    return anim
+    if save_path is not None:
+        anim.save(save_path, writer="ffmpeg", fps=30)
+        plt.close(fig)
+        del anim
+    else:
+        return anim

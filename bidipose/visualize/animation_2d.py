@@ -29,6 +29,7 @@ def set_lines(x: np.ndarray, y: np.ndarray, bones: np.ndarray) -> tuple[np.ndarr
 def vis_pose2d(
     pred_pose: np.ndarray,
     gt_pose: np.ndarray | None = None,
+    save_path: str | None = None,
     title: str = "2D Pose Visualization",
 ) -> animation.FuncAnimation:
     """Visualize 2D poses from two views.
@@ -38,6 +39,7 @@ def vis_pose2d(
             First 2 channels are for view1, channels 4-5 are for view2.
         gt_pose (np.ndarray | None): Ground truth 2D poses from two-views (T, J, 6).
             First 2 channels are for view1, channels 4-5 are for view2.
+        save_path (str | None): Path to save the animation. If None, the animation is returned.
         title (str): Title of the plot.
 
     Returns:
@@ -111,4 +113,9 @@ def vis_pose2d(
         interval=30,
         repeat=False,
     )
-    return anim
+    if save_path is not None:
+        anim.save(save_path, writer="ffmpeg", fps=30)
+        plt.close(fig)
+        del anim
+    else:
+        return anim
