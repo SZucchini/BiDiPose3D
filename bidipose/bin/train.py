@@ -43,6 +43,16 @@ from bidipose.diffusion.sampler import DDPMSampler
 #   - trainer: trainer
 #   - local: local
 
+def flatten_conf(cfg, parent_key='', sep='.'):
+    items = []
+    for k, v in cfg.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict) or isinstance(v, DictConfig):
+            items.extend(flatten_conf(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
 # You define detailed parameters in each subdirectory's yaml file.
 @hydra.main(config_path="../../configs", config_name="config")
 def main(cfg: DictConfig) -> None:
@@ -97,6 +107,8 @@ def main(cfg: DictConfig) -> None:
 
     # WandbLogger
     wandb_logger = WandbLogger(project=cfg.logger.project, name=exp_name, save_dir=cfg.logger.save_dir)
+
+    wandb_logger.log_hyperparams(flatten_conf(cfg))
 
     checkpoint_callback = ModelCheckpoint(**cfg.checkpoint)
 
