@@ -41,7 +41,7 @@ def test_motion_agformer(t):
 @pytest.mark.parametrize("t", [None, torch.randn(4)])
 def test_dstformer(t):
     """Test the DSTformer model."""
-    model = DSTformer(dim_feat=512, mlp_ratio=2, norm_layer=partial(nn.LayerNorm, eps=1e-6))
+    model = DSTformer(dim_feat=256, mlp_ratio=2, norm_layer=partial(nn.LayerNorm, eps=1e-6))
 
     x = torch.randn(4, 81, 17, 6)
     quat = torch.randn(4, 4)
