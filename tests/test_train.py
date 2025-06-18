@@ -2,7 +2,10 @@ import hydra
 from omegaconf import DictConfig
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import ModelCheckpoint
 import pytorch_lightning as pl
+from pathlib import Path
+import subprocess
 
 import bidipose.models as models
 from bidipose.diffusion.sampler import DDPMSampler
@@ -169,6 +172,16 @@ class DummyStereoDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers
         )
+    
+def flatten_conf(cfg, parent_key='', sep='.'):
+    items = []
+    for k, v in cfg.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict) or isinstance(v, DictConfig):
+            items.extend(flatten_conf(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
 # You define detailed parameters in each subdirectory's yaml file.
 @hydra.main(config_path='../configs', config_name='config')
@@ -179,8 +192,27 @@ def main(cfg: DictConfig) -> None:
     Args:
         cfg (DictConfig): Configuration composed by Hydra.
     """
+
+    try:
+        commit_hash = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+        ).decode("utf-8").strip()[:8]
+    except Exception:
+        commit_hash = "nogit"
+
+    overrides_path = Path(cfg.base_dir) / ".hydra" / "overrides.yaml"
+    if overrides_path.exists():
+        overrides = overrides_path.read_text().strip().splitlines()
+        clean_overrides = [o.strip("- ") for o in overrides]
+        overrides_str = "_".join(clean_overrides)
+        exp_name = f"{commit_hash}-{overrides_str}"
+    else:
+        exp_name = commit_hash
+
+    print(f"Experiment Name: {exp_name}")
+
     # DataModule
-    datamodule = DummyStereoDataModule()
+    datamodule = DummyStereoDataModule(batch_size=cfg.data.batch_size)
     
     # Model
     model = getattr(models, cfg.model.name)(**cfg.model.params)
@@ -202,13 +234,18 @@ def main(cfg: DictConfig) -> None:
     # WandbLogger
     wandb_logger = WandbLogger(
         project=cfg.logger.project,
-        name=cfg.logger.name,
+        name=exp_name,
         save_dir=cfg.logger.save_dir
     )
+
+    wandb_logger.log_hyperparams(flatten_conf(cfg))
+
+    checkpoint_callback = ModelCheckpoint(**cfg.checkpoint)
 
     # Trainer
     trainer = Trainer(
         logger=wandb_logger,
+        callbacks=[checkpoint_callback],
         **cfg.trainer
     )
 

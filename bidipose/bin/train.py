@@ -1,6 +1,8 @@
 import hydra
 import pytorch_lightning as pl
 from omegaconf import DictConfig
+from pathlib import Path
+import subprocess
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
@@ -41,6 +43,15 @@ from bidipose.diffusion.sampler import DDPMSampler
 #   - trainer: trainer
 #   - local: local
 
+def flatten_conf(cfg, parent_key='', sep='.'):
+    items = []
+    for k, v in cfg.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, dict) or isinstance(v, DictConfig):
+            items.extend(flatten_conf(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
 # You define detailed parameters in each subdirectory's yaml file.
 @hydra.main(config_path="../../configs", config_name="config")
@@ -51,6 +62,24 @@ def main(cfg: DictConfig) -> None:
         cfg (DictConfig): Configuration composed by Hydra.
 
     """
+    try:
+        commit_hash = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+        ).decode("utf-8").strip()[:8]
+    except Exception:
+        commit_hash = "nogit"
+
+    overrides_path = Path(cfg.base_dir) / ".hydra" / "overrides.yaml"
+    if overrides_path.exists():
+        overrides = overrides_path.read_text().strip().splitlines()
+        clean_overrides = [o.strip("- ") for o in overrides]
+        overrides_str = "_".join(clean_overrides)
+        exp_name = f"{commit_hash}-{overrides_str}"
+    else:
+        exp_name = commit_hash
+
+    print(f"Experiment Name: {exp_name}")
+
     # fix seed for reproducibility
     pl.seed_everything(cfg.seed, workers=True)
 
@@ -77,7 +106,9 @@ def main(cfg: DictConfig) -> None:
     module = DiffusionLightningModule(model=model, sampler=sampler, **cfg.module)
 
     # WandbLogger
-    wandb_logger = WandbLogger(project=cfg.logger.project, name=cfg.logger.name, save_dir=cfg.logger.save_dir)
+    wandb_logger = WandbLogger(project=cfg.logger.project, name=exp_name, save_dir=cfg.logger.save_dir)
+
+    wandb_logger.log_hyperparams(flatten_conf(cfg))
 
     checkpoint_callback = ModelCheckpoint(**cfg.checkpoint)
 
