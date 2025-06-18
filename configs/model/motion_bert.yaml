@@ -8,7 +8,7 @@ params:
   num_heads: 8
   mlp_ratio: 4
   num_joints: 17
-  maxlen: 88
+  pose_frames: 81
   qkv_bias: true
   qk_scale: null
   drop_rate: 0.0
@@ -16,3 +16,4 @@ params:
   drop_path_rate: 0.0
   norm_layer: LayerNorm
   att_fuse: true
+  num_tokens: 7
