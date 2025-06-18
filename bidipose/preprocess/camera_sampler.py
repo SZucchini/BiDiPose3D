@@ -127,6 +127,8 @@ class StereoCameraSampler:
                 min_fov = min(h_fov, v_fov)
                 d_min = max(radius * self.dmin_factor, radius / np.tan(min_fov / 2))
                 d_max = radius * self.dmax_factor
+                if d_min > d_max:
+                    d_min, d_max = d_max, d_min
                 baseline_min, baseline_max = map(np.deg2rad, self.baseline_angle_range)
                 for _ in range(self.max_iter):
                     d1, d2 = self.rng.uniform(d_min, d_max, size=2)

@@ -92,6 +92,8 @@ class StereoCameraDataset(Dataset):
                 kpts = get_kpts_from_cdf(file)
             elif file.endswith(".npy"):
                 kpts = np.load(file)
+            if np.isnan(kpts).any():
+                continue
 
             clips = split_clips(len(kpts), clip_length=81, stride=81 // 9)
             for clip in clips:
