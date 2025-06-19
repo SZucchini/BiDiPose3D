@@ -17,6 +17,18 @@ from bidipose.models.base import BaseModel
 from .drop import DropPath
 
 
+def _broadcast_temporal(cam_params, pose_frames):
+    bs, num_tokens, dim = cam_params.shape
+    cam_params = cam_params.unsqueeze(1).expand(bs, pose_frames, num_tokens, dim)
+    return cam_params.reshape(bs * pose_frames, num_tokens, dim)
+
+
+def _broadcast_spatial(cam_params, num_joints):
+    bs, num_tokens, dim = cam_params.shape
+    cam_params = cam_params.unsqueeze(2).expand(bs, num_tokens, num_joints, dim)
+    return cam_params
+
+
 class SinusoidalPositionEmbeddings(nn.Module):
     """Sinusoidal position embeddings for timestep encoding."""
 
@@ -364,35 +376,85 @@ class Block(nn.Module):
         if self.att_fuse:
             self.ts_attn = nn.Linear(dim * 2, dim * 2)
 
-    def forward(self, x, seqlen=1):
+    def forward(self, x: torch.Tensor, cam_params: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Forward pass of the transformer block with spatio-temporal attention.
+
+        This method applies dual-stream spatio-temporal attention mechanisms to process
+        pose sequences and camera parameters. It supports two modes: stage_st (spatial
+        then temporal) and stage_ts (temporal then spatial).
+
+        Args:
+            x (torch.Tensor): Input pose features from previous layer.
+                Shape: (B*T, J, D) where:
+                - B: batch size
+                - T: number of frames
+                - J: number of joints
+                - D: feature dimension
+            cam_params (torch.Tensor): Camera parameter tokens.
+                Shape: (B, num_tokens, D) where:
+                - B: batch size
+                - num_tokens: number of camera parameter tokens (default 7)
+                - D: feature dimension
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor]:
+                - x (torch.Tensor): Processed pose features.
+                    Shape: (B*T, J, D)
+                - cam_params (torch.Tensor): Updated camera parameter tokens.
+                    Shape: (B, num_tokens, D)
+
+        """
         if self.st_mode == "stage_st":
-            x = x + self.drop_path(self.attn_s(self.norm1_s(x), seqlen))
+            bst, num_joints, _ = x.shape
+            bs, num_tokens, _ = cam_params.shape
+            pose_frames = bst // bs
+            seq_len = num_tokens + pose_frames
+
+            cam_params_temporal = _broadcast_temporal(cam_params, pose_frames)  # (B*T, num_tokens, dim)
+            x = torch.cat([cam_params_temporal, x], dim=1)  # (B*T, num_tokens+J, dim)
+            x = x + self.drop_path(self.attn_s(self.norm1_s(x)))
             x = x + self.drop_path(self.mlp_s(self.norm2_s(x)))
-            x = x + self.drop_path(self.attn_t(self.norm1_t(x), seqlen))
+            cam_params_temporal, x = x[:, :num_tokens, :], x[:, num_tokens:, :]
+
+            x = x.reshape(bs, pose_frames, num_joints, -1)  # (B, T, J, D)
+            new_dim = x.shape[-1]
+            cam_params = cam_params_temporal.reshape(bs, -1, num_tokens, new_dim).mean(dim=1)  # (B, num_tokens, D)
+            cam_params_spatial = _broadcast_spatial(cam_params, num_joints)  # (B, num_tokens, J, D)
+            x = torch.cat([cam_params_spatial, x], dim=1)  # (B, num_tokens+T, J, D)
+            x = x.reshape(-1, num_joints, new_dim)
+            x = x + self.drop_path(self.attn_t(self.norm1_t(x), seq_len))
             x = x + self.drop_path(self.mlp_t(self.norm2_t(x)))
+            x = x.reshape(bs, -1, num_joints, new_dim)  # (B, num_tokens+T, J, D)
+            cam_params_spatial, x = x[:, :num_tokens, :, :], x[:, num_tokens:, :, :]
+            cam_params = cam_params_spatial.mean(dim=2)  # (B, num_tokens, D)
+            x = x.reshape(bst, num_joints, -1)
+
         elif self.st_mode == "stage_ts":
-            x = x + self.drop_path(self.attn_t(self.norm1_t(x), seqlen))
+            bst, num_joints, dim = x.shape
+            bs, num_tokens, _ = cam_params.shape
+            pose_frames = bst // bs
+            seq_len = num_tokens + pose_frames
+
+            x = x.reshape(bs, pose_frames, num_joints, -1)  # (B, T, J, D)
+            cam_params_spatial = _broadcast_spatial(cam_params, num_joints)  # (B, num_tokens, J, D)
+            x = torch.cat([cam_params_spatial, x], dim=1)  # (B, num_tokens+T, J, D)
+            x = x.reshape(-1, num_joints, dim)  # (B*(num_tokens+T), J, D)
+            x = x + self.drop_path(self.attn_t(self.norm1_t(x), seq_len))
             x = x + self.drop_path(self.mlp_t(self.norm2_t(x)))
-            x = x + self.drop_path(self.attn_s(self.norm1_s(x), seqlen))
+            x = x.reshape(bs, num_tokens + pose_frames, num_joints, -1)  # (B, num_tokens+T, J, D)
+            cam_params_spatial, x = x[:, :num_tokens, :, :], x[:, num_tokens:, :, :]
+
+            cam_params = cam_params_spatial.mean(dim=2)  # (B, num_tokens, D)
+            cam_params_temporal = _broadcast_temporal(cam_params, pose_frames)  # (B*T, num_tokens, D)
+            x = x.reshape(bs * pose_frames, num_joints, -1)  # (B*T, J, D)
+            x = torch.cat([cam_params_temporal, x], dim=1)  # (B*T, num_tokens+J, D)
+            x = x + self.drop_path(self.attn_s(self.norm1_s(x)))
             x = x + self.drop_path(self.mlp_s(self.norm2_s(x)))
-        elif self.st_mode == "stage_para":
-            x_t = x + self.drop_path(self.attn_t(self.norm1_t(x), seqlen))
-            x_t = x_t + self.drop_path(self.mlp_t(self.norm2_t(x_t)))
-            x_s = x + self.drop_path(self.attn_s(self.norm1_s(x), seqlen))
-            x_s = x_s + self.drop_path(self.mlp_s(self.norm2_s(x_s)))
-            if self.att_fuse:
-                #             x_s, x_t: [BF, J, dim]
-                alpha = torch.cat([x_s, x_t], dim=-1)
-                BF, J = alpha.shape[:2]
-                # alpha = alpha.mean(dim=1, keepdim=True)
-                alpha = self.ts_attn(alpha).reshape(BF, J, -1, 2)
-                alpha = alpha.softmax(dim=-1)
-                x = x_t * alpha[:, :, :, 1] + x_s * alpha[:, :, :, 0]
-            else:
-                x = (x_s + x_t) * 0.5
+            cam_params_temporal, x = x[:, :num_tokens, :], x[:, num_tokens:, :]
+            cam_params = cam_params_temporal.reshape(bs, pose_frames, num_tokens, -1).mean(dim=1)  # (B, num_tokens, D)
         else:
             raise NotImplementedError(self.st_mode)
-        return x
+        return x, cam_params
 
 
 class DSTformer(BaseModel):
@@ -406,7 +468,7 @@ class DSTformer(BaseModel):
         num_heads=8,
         mlp_ratio=4,
         num_joints=17,
-        maxlen=88,
+        pose_frames=81,
         qkv_bias=True,
         qk_scale=None,
         drop_rate=0.0,
@@ -415,16 +477,23 @@ class DSTformer(BaseModel):
         norm_layer=nn.LayerNorm,
         att_fuse=True,
         timestep_embed_dim=64,
+        num_tokens=7,
     ):
         super().__init__()
         norm_layer = getattr(nn, norm_layer) if isinstance(norm_layer, str) else norm_layer
         self.dim_out = dim_out
         self.dim_feat = dim_feat
+        self.num_tokens = num_tokens
+        self.pose_frames = pose_frames
+        self.num_joints = num_joints
+        self.total_frames = pose_frames + num_tokens
+        self.total_joints = num_joints + num_tokens
         self.joints_embed = nn.Linear(dim_in, dim_feat)
+        self.cam_params_embed = nn.Linear(7, dim_feat * num_tokens)
 
         self.quat_embed = nn.Linear(1, dim_feat)
         self.trans_embed = nn.Linear(1, dim_feat)
-        self.type_embed = nn.Parameter(torch.zeros(3, 1, 1, dim_feat))
+        self.type_embed = nn.Parameter(torch.zeros(2, 1, dim_feat))
         trunc_normal_(self.type_embed, std=0.02)
 
         self.pos_drop = nn.Dropout(p=drop_rate)
@@ -469,11 +538,12 @@ class DSTformer(BaseModel):
         else:
             self.pre_logits = nn.Identity()
         self.head = nn.Linear(dim_rep, dim_out) if dim_out > 0 else nn.Identity()
+        self.head_cam = nn.Linear(dim_rep, 7)
 
         self.quat_linear = nn.Linear(dim_out, 1)
         self.trans_linear = nn.Linear(dim_out, 1)
 
-        self.temp_embed = nn.Parameter(torch.zeros(1, maxlen, 1, dim_feat))
+        self.temp_embed = nn.Parameter(torch.zeros(1, pose_frames, 1, dim_feat))
         self.pos_embed = nn.Parameter(torch.zeros(1, num_joints, dim_feat))
 
         self.time_mlp = nn.Sequential(
@@ -492,6 +562,11 @@ class DSTformer(BaseModel):
             for i in range(depth):
                 self.ts_attn[i].weight.data.fill_(0)
                 self.ts_attn[i].bias.data.fill_(0.5)
+
+            self.ts_attn_cam = nn.ModuleList([nn.Linear(dim_feat * 2, 2) for i in range(depth)])
+            for i in range(depth):
+                self.ts_attn_cam[i].weight.data.fill_(0)
+                self.ts_attn_cam[i].bias.data.fill_(0.5)
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -516,73 +591,91 @@ class DSTformer(BaseModel):
         trans: torch.Tensor,
         t: torch.Tensor | None = None,
         return_rep: bool = False,
-    ):
-        """Forward pass of the MotionAGFormer model.
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Forward pass of the DSTformer model.
+
+        This method processes binocular 2D pose sequences along with camera parameters
+        through a dual-stream spatio-temporal transformer architecture to predict
+        3D poses and camera parameters.
 
         Args:
-            x (torch.Tensor): Input 2D from two-views (B, T, J, C=3*2).
-            quat (torch.Tensor): Quaternions for cam1 to cam2 (B, 4).
-            trans (torch.Tensor): Translation vector for cam1 to cam2 (B, 3).
-            t (torch.Tensor): Time step embedding.  # NOTE: We need to decide the shape.
-            return_rep (bool): If True, returns the representation logits instead of the final output.
+            x (torch.Tensor): Input normalized 2D joint coordinates from two camera views.
+                Shape: (B, T, J, C) where:
+                - B: batch size
+                - T: number of frames (pose_frames, default 81)
+                - J: number of joints (default 17)
+                - C: coordinate dimensions (6 for normalized coordinates from both views)
+            quat (torch.Tensor): Input quaternion representing rotation from cam1 to cam2.
+                Shape: (B, 4) where components are [w, x, y, z]
+            trans (torch.Tensor): Input translation vector from cam1 to cam2.
+                Shape: (B, 3) for [tx, ty, tz] components
+            t (torch.Tensor | None, optional): Diffusion timestep for conditional generation.
+                Shape: (B,) containing timestep values. Defaults to None.
+            return_rep (bool, optional): Whether to return intermediate representations
+                instead of final predictions. Defaults to False.
 
         Returns:
-            pred_pose (torch.Tensor): Predicted 2D poses from 2 views (B, T, J, 3*2).
-            pred_quat (torch.Tensor): Predicted quaternion (B, 4).
-            pred_trans (torch.Tensor): Predicted translation (B, 3).
+            torch.Tensor | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                If return_rep=True:
+                    torch.Tensor: Intermediate feature representations.
+                        Shape: (B, T, J, dim_rep)
+                If return_rep=False:
+                    tuple containing:
+                    - pred_pose (torch.Tensor): Predicted normalized 2D poses for both camera views.
+                        Shape: (B, T, J, 6) for normalized pixel coordinates from both cameras
+                    - pred_quat (torch.Tensor): Predicted quaternion (normalized).
+                        Shape: (B, 4) with w-component always positive
+                    - pred_trans (torch.Tensor): Predicted translation vector (normalized).
+                        Shape: (B, 3)
 
         """
-        quat = quat.unsqueeze(-1)  # (B, 4. 1)
-        trans = trans.unsqueeze(-1)  # (B, 3, 1)
+        cam_params = torch.cat((quat, trans), dim=-1)  # (B, 7)
+        cam_params = self.cam_params_embed(cam_params)  # (B, D * num_tokens)
+        cam_params = cam_params.reshape(-1, self.num_tokens, self.dim_feat)
+        cam_params = cam_params + self.type_embed[1]  # (B, num_tokens, D)
 
         bs, frames, joints, _ = x.shape
         x = self.joints_embed(x)
-        x = x + self.pos_embed + self.type_embed[0]
+        x = x + self.pos_embed + self.type_embed[0][None, :, :]  # (B, T+7, J, D)
 
-        quat = self.quat_embed(quat).unsqueeze(2)
-        quat = quat.expand(-1, -1, joints, -1) + self.pos_embed + self.type_embed[1]
-        trans = self.trans_embed(trans).unsqueeze(2)
-        trans = trans.expand(-1, -1, joints, -1) + self.pos_embed + self.type_embed[2]
-
-        x = torch.cat((x, quat, trans), dim=1)
         if t is not None:
-            time_embed = self.time_mlp(t)  # (B, 1, D)
+            time_embed = self.time_mlp(t)  # (B, D)
+            cam_params = cam_params + time_embed.unsqueeze(1).expand(bs, self.num_tokens, -1)  # (B, 7, D)
             time_embed = time_embed.unsqueeze(1).unsqueeze(1)  # (B, 1, 1, D)
             time_embed = time_embed.expand(bs, x.size(1), x.size(2), -1)  # (B, T+7, J, D)
             x = x + time_embed
 
-        frames_all = x.shape[1]
-        x = x + self.temp_embed[:, :frames_all, :, :]
-        x = x.reshape(bs * frames_all, joints, self.dim_feat)
+        x = x + self.temp_embed
+        x = x.reshape(bs * self.pose_frames, joints, self.dim_feat)
         x = self.pos_drop(x)
 
         for idx, (blk_st, blk_ts) in enumerate(zip(self.blocks_st, self.blocks_ts, strict=False)):
-            x_st = blk_st(x, frames_all)
-            x_ts = blk_ts(x, frames_all)
+            x_st, cam_params_st = blk_st(x, cam_params)
+            x_ts, cam_params_ts = blk_ts(x, cam_params)
             if self.att_fuse:
                 alpha = self.ts_attn[idx](torch.cat([x_st, x_ts], dim=-1)).softmax(dim=-1)
                 x = x_st * alpha[..., 0:1] + x_ts * alpha[..., 1:2]
+                alpha_cam = self.ts_attn_cam[idx](torch.cat([cam_params_st, cam_params_ts], dim=-1)).softmax(dim=-1)
+                cam_params = cam_params_st * alpha_cam[..., 0:1] + cam_params_ts * alpha_cam[..., 1:2]
             else:
                 x = 0.5 * (x_st + x_ts)
+                cam_params = 0.5 * (cam_params_st + cam_params_ts)  # (B, num_tokens, D)
 
-        x = self.norm(x).reshape(bs, frames_all, joints, -1)
+        x = self.norm(x).reshape(bs, frames, joints, -1)
         rep = self.pre_logits(x)
         if return_rep:
             return rep
-        out = self.head(rep)
+        pred_pose = self.head(rep)
 
-        pred_pose = out[:, :frames, :, :]
-        pred_quat = out[:, frames : frames + 4, :, :].mean(dim=2)
-        pred_quat = F.normalize(self.quat_linear(pred_quat), dim=1)
+        rep_cam = self.pre_logits(cam_params.mean(1))
+        cam_params = self.head_cam(rep_cam)  # (B, 7)
+        pred_quat = cam_params[:, :4]
+        pred_trans = cam_params[:, 4:]
+
+        pred_quat = F.normalize(pred_quat, dim=1)
         neg_mask = pred_quat[..., 0] < 0
         pred_quat[neg_mask] = -pred_quat[neg_mask]
-
-        pred_trans = out[:, frames + 4 :, :, :].mean(dim=2)
-        pred_trans = F.normalize(self.trans_linear(pred_trans), dim=1)
-
-        pred_quat = pred_quat.squeeze(-1)  # (B, 4)
-        pred_trans = pred_trans.squeeze(-1)  # (B, 3)
-
+        pred_trans = F.normalize(pred_trans, dim=1)
         return pred_pose, pred_quat, pred_trans
 
     def get_representation(self, x):
