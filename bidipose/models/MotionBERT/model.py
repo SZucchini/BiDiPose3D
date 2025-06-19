@@ -376,7 +376,34 @@ class Block(nn.Module):
         if self.att_fuse:
             self.ts_attn = nn.Linear(dim * 2, dim * 2)
 
-    def forward(self, x, cam_params):
+    def forward(self, x: torch.Tensor, cam_params: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Forward pass of the transformer block with spatio-temporal attention.
+
+        This method applies dual-stream spatio-temporal attention mechanisms to process
+        pose sequences and camera parameters. It supports two modes: stage_st (spatial
+        then temporal) and stage_ts (temporal then spatial).
+
+        Args:
+            x (torch.Tensor): Input pose features from previous layer.
+                Shape: (B*T, J, D) where:
+                - B: batch size
+                - T: number of frames
+                - J: number of joints
+                - D: feature dimension
+            cam_params (torch.Tensor): Camera parameter tokens.
+                Shape: (B, num_tokens, D) where:
+                - B: batch size
+                - num_tokens: number of camera parameter tokens (default 7)
+                - D: feature dimension
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor]:
+                - x (torch.Tensor): Processed pose features.
+                    Shape: (B*T, J, D)
+                - cam_params (torch.Tensor): Updated camera parameter tokens.
+                    Shape: (B, num_tokens, D)
+
+        """
         if self.st_mode == "stage_st":
             bst, num_joints, _ = x.shape
             bs, num_tokens, _ = cam_params.shape
@@ -564,20 +591,42 @@ class DSTformer(BaseModel):
         trans: torch.Tensor,
         t: torch.Tensor | None = None,
         return_rep: bool = False,
-    ):
-        """Forward pass of the MotionAGFormer model.
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Forward pass of the DSTformer model.
+
+        This method processes binocular 2D pose sequences along with camera parameters
+        through a dual-stream spatio-temporal transformer architecture to predict
+        3D poses and camera parameters.
 
         Args:
-            x (torch.Tensor): Input 2D from two-views (B, T, J, C=3*2).
-            quat (torch.Tensor): Quaternions for cam1 to cam2 (B, 4).
-            trans (torch.Tensor): Translation vector for cam1 to cam2 (B, 3).
-            t (torch.Tensor): Time step embedding.
-            return_rep (bool): If True, returns the representation logits instead of the final output.
+            x (torch.Tensor): Input normalized 2D joint coordinates from two camera views.
+                Shape: (B, T, J, C) where:
+                - B: batch size
+                - T: number of frames (pose_frames, default 81)
+                - J: number of joints (default 17)
+                - C: coordinate dimensions (6 for normalized coordinates from both views)
+            quat (torch.Tensor): Input quaternion representing rotation from cam1 to cam2.
+                Shape: (B, 4) where components are [w, x, y, z]
+            trans (torch.Tensor): Input translation vector from cam1 to cam2.
+                Shape: (B, 3) for [tx, ty, tz] components
+            t (torch.Tensor | None, optional): Diffusion timestep for conditional generation.
+                Shape: (B,) containing timestep values. Defaults to None.
+            return_rep (bool, optional): Whether to return intermediate representations
+                instead of final predictions. Defaults to False.
 
         Returns:
-            pred_pose (torch.Tensor): Predicted 2D poses from 2 views (B, T, J, 3*2).
-            pred_quat (torch.Tensor): Predicted quaternion (B, 4).
-            pred_trans (torch.Tensor): Predicted translation (B, 3).
+            torch.Tensor | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                If return_rep=True:
+                    torch.Tensor: Intermediate feature representations.
+                        Shape: (B, T, J, dim_rep)
+                If return_rep=False:
+                    tuple containing:
+                    - pred_pose (torch.Tensor): Predicted normalized 2D poses for both camera views.
+                        Shape: (B, T, J, 6) for normalized pixel coordinates from both cameras
+                    - pred_quat (torch.Tensor): Predicted quaternion (normalized).
+                        Shape: (B, 4) with w-component always positive
+                    - pred_trans (torch.Tensor): Predicted translation vector (normalized).
+                        Shape: (B, 3)
 
         """
         cam_params = torch.cat((quat, trans), dim=-1)  # (B, 7)
