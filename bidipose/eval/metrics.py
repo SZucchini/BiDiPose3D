@@ -57,7 +57,9 @@ def camera_direction_error(trans_pred: torch.Tensor, trans_gt: torch.Tensor) -> 
     Returns:
         torch.Tensor: Mean squared error of the camera direction.
     """
-    similarity = torch.nn.functional.cosine_similarity(trans_pred, trans_gt, dim=1)
+    similarity1 = torch.nn.functional.cosine_similarity(trans_pred,  trans_gt, dim=1)
+    similarity2 = torch.nn.functional.cosine_similarity(trans_pred, -trans_gt, dim=1)
+    similarity = torch.max(similarity1, similarity2)
     error_angle = torch.acos(similarity.clamp(-1.0, 1.0))  # Clamp to avoid NaN
     return error_angle.abs().mean()
 
@@ -93,7 +95,7 @@ def _quaternion_multiply(q1: torch.Tensor, q2: torch.Tensor) -> torch.Tensor:
     return torch.stack((w, x, y, z), dim=1)
 
 
-def camera_rotation_error(quat_pred: torch.Tensor, quat_gt: torch.Tensor) -> torch.Tensor:
+def _camera_rotation_error(quat_pred: torch.Tensor, quat_gt: torch.Tensor) -> torch.Tensor:
     """
     Compute the camera rotation error between predicted and ground truth quaternions.
     
@@ -107,5 +109,25 @@ def camera_rotation_error(quat_pred: torch.Tensor, quat_gt: torch.Tensor) -> tor
     quat_pred_inv = _quaternion_conjugate(quat_pred)
     quat_rel = _quaternion_multiply(quat_pred_inv, quat_gt)
     quat_rel = torch.nn.functional.normalize(quat_rel, dim=1)
-    error_angle = quat_rel[:,0].clamp(-1, 1).arccos().mul(2).add(torch.pi).remainder(2*torch.pi).sub(torch.pi)
+    error_angle = quat_rel[:,0].clamp(-1, 1).abs().arccos().mul(2)
     return error_angle.abs().mean()
+
+
+def camera_rotation_error(quat_pred: torch.Tensor, quat_gt: torch.Tensor, trans_gt: torch.Tensor) -> torch.Tensor:
+    """
+    Compute the camera rotation error between predicted and ground truth quaternions taking multiple solutions into account.
+    
+    Args:
+        quat_pred (torch.Tensor): Predicted quaternions (B, 4).
+        quat_gt (torch.Tensor): Ground truth quaternions (B, 4).
+        trans_gt (torch.Tensor): Ground truth translations (B, 3).
+    
+    Returns:
+        torch.Tensor: Mean squared error of the camera rotation.
+    """
+    quat_pi = torch.nn.functional.pad(trans_gt, (1, 0))
+    quat_gt1 = quat_gt
+    quat_gt2 = _quaternion_multiply(quat_pi, quat_gt)
+    error1 = _camera_rotation_error(quat_pred, quat_gt1)
+    error2 = _camera_rotation_error(quat_pred, quat_gt2)
+    return torch.min(error1, error2)

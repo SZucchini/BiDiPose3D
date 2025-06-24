@@ -417,7 +417,7 @@ class DiffusionLightningModule(pl.LightningModule):
                 trans_mask=trans_mask,
             )
             epipolar_error_value = epipolar_error(x, quat_inpainted, trans_inpainted)
-            camera_direction_error_value = camera_rotation_error(quat_inpainted, quat)
+            camera_direction_error_value = camera_rotation_error(quat_inpainted, quat, trans)
             camera_translation_error_value = camera_direction_error(trans_inpainted, trans)
             error_dict["epipolar_error"]["camera_params"].append(epipolar_error_value.item())
             error_dict["camera_direction_error"]["camera_params"].append(camera_direction_error_value.item())
