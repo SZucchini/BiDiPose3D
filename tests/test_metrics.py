@@ -70,11 +70,18 @@ def test_quaternion_multiply_identity():
 def test_camera_rotation_error_zero():
     quat_pred = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
     quat_gt = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
-    result = metrics.camera_rotation_error(quat_pred, quat_gt)
+    result = metrics._camera_rotation_error(quat_pred, quat_gt)
     assert torch.isclose(result, torch.tensor(0.0), atol=1e-6), result
 
 def test_camera_rotation_error_180_deg():
     quat_pred = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
     quat_gt = torch.tensor([[0.0, 1.0, 0.0, 0.0]])
-    result = metrics.camera_rotation_error(quat_pred, quat_gt)
+    result = metrics._camera_rotation_error(quat_pred, quat_gt)
     assert torch.isclose(result, torch.tensor(torch.pi), atol=1e-5), result
+
+def test_camera_rotation_error():
+    quat_pred = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
+    quat_gt = torch.tensor([[1.0, 0.0, 0.0, 0.0]])
+    trans_gt = torch.tensor([[1.0, 0.0, 0.0]])
+    result = metrics.camera_rotation_error(quat_pred, quat_gt, trans_gt)
+    assert torch.isclose(result, torch.tensor(0.0), atol=1e-5), result
