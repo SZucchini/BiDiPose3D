@@ -1,0 +1,12 @@
+name: BinocularFormer
+params:
+  latent_dim: 512
+  num_head: 8
+  num_layers: 8
+  ff_size: 1024
+  dropout: 0.1
+  activation: gelu
+  timestep_embed_dim: 512
+  num_joints: 17
+  dim_cam_params: 7
+  fusion_type: concat
