@@ -62,7 +62,7 @@ class PositionalEncoding(nn.Module):
         div_term = torch.exp(torch.arange(0, latent_dim, 2).float() * (-np.log(10000.0) / latent_dim))
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
-        pe = pe.unsqueeze(0).transpose(0, 1)
+        pe = pe.unsqueeze(0)  # .transpose(0, 1)
 
         self.register_buffer("pe", pe)
 
@@ -70,13 +70,13 @@ class PositionalEncoding(nn.Module):
         """Forward pass of the PositionalEncoding module.
 
         Args:
-            x (torch.Tensor): Input tensor of shape (T, B, J * latent_dim).
+            x (torch.Tensor): Input tensor of shape (B, T, latent_dim).
 
         Returns:
-            x (torch.Tensor): Positional encoded tensor of shape (T, B, J * latent_dim).
+            x (torch.Tensor): Positional encoded tensor of shape (B, T, latent_dim).
 
         """
-        x = x + self.pe[: x.shape[0], :]
+        x = x + self.pe[:, : x.shape[1], :]
         return self.dropout(x)
 
 
@@ -143,20 +143,6 @@ class InputProcess(nn.Module):
         cam_embed = cam_embed.expand(cam_embed.shape[0], frames, self.latent_dim)  # (B, T, latent_dim)
         return cam_embed
 
-    def _encode_position(self, x: torch.Tensor) -> torch.Tensor:
-        """Encode the input tensor with positional encoding.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape (B, T, latent_dim).
-
-        Returns:
-            x (torch.Tensor): Positional encoded tensor of shape (T, B, latent_dim).
-
-        """
-        x = x.permute(1, 0, 2)  # (T, B, latent_dim)
-        x = self.positional_encoding(x)  # (T, B, latent_dim)
-        return x
-
     def forward(self, x: torch.Tensor, quat: torch.Tensor, trans: torch.Tensor) -> torch.Tensor:
         """Forward pass of the MotionAGFormer model.
 
@@ -183,18 +169,18 @@ class InputProcess(nn.Module):
 
         if self.fusion_type == "add":
             x1 = x1 + cam1_embed  # (B, T, latent_dim)
-            x1 = self._encode_position(x1)  # (T, B, latent_dim)
+            x1 = self.positional_encoding(x1)  # (B, T, latent_dim)
             x2 = x2 + cam2_embed
-            x2 = self._encode_position(x2)
+            x2 = self.positional_encoding(x2)
         else:
             x1 = torch.cat([x1, cam1_embed], dim=-1)  # (B, T, latent_dim * 2)
             x1 = self.fusion(x1)  # (B, T, latent_dim)
-            x1 = self._encode_position(x1)  # (T, B, latent_dim)
+            x1 = self.positional_encoding(x1)  # (B, T, latent_dim)
             x2 = torch.cat([x2, cam2_embed], dim=-1)
             x2 = self.fusion(x2)
-            x2 = self._encode_position(x2)
+            x2 = self.positional_encoding(x2)
 
-        x = torch.cat([x1, x2], dim=0)  # (T * 2, B, latent_dim)
+        x = torch.cat([x1, x2], dim=1)  # (B, T * 2, latent_dim)
         return x
 
 
@@ -244,6 +230,7 @@ class BinocularFormer(BaseModel):
             dim_feedforward=ff_size,
             dropout=dropout,
             activation=activation,
+            batch_first=True,
         )
         self.seqTransEncoder = nn.TransformerEncoder(transformer_encoder_layer, num_layers=num_layers)
         self.head = nn.Linear(latent_dim, num_joints * 10)
@@ -270,16 +257,14 @@ class BinocularFormer(BaseModel):
 
         """
         bs, frames, joints, _ = x.shape
-        x = self.input_process(x, quat, trans)  # (T * 2, B, latent_dim)
+        x = self.input_process(x, quat, trans)  # (B, T * 2, latent_dim)
         if t is not None:
             time_embed = self.time_mlp(t)  # (B, D)
             time_embed = time_embed.unsqueeze(1)  # (B, 1, D)
-            time_embed = time_embed.expand(bs, x.size(0), -1)  # (B, T * 2, D)
-            time_embed = time_embed.permute(1, 0, 2)  # (T * 2, B, D)
-            x = x + time_embed  # (T * 2, B, latent_dim)
+            time_embed = time_embed.expand(bs, x.size(1), -1)  # (B, T * 2, D)
+            x = x + time_embed  # (B, T * 2, latent_dim)
 
-        x = self.seqTransEncoder(x)  # (T * 2, B, latent_dim)
-        x = x.permute(1, 0, 2)  # (B, T * 2, latent_dim)
+        x = self.seqTransEncoder(x)  # (B, T * 2, latent_dim)
         x = self.head(x)  # (B, T * 2, J * 10)
         x = x.view(bs, frames * 2, joints, 10)
         pred_pose1 = x[:, :frames, :, :3]  # (B, T, J, 3)
