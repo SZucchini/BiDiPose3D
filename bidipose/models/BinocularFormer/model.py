@@ -139,7 +139,7 @@ class InputProcess(nn.Module):
 
         """
         cam_embed = self.camera_embedding(cam_params)  # (B, latent_dim)
-        cam_embed = cam_embed.view(cam_embed.shape[0], 1, self.latent_dim)  # (B, 1, latent_dim)
+        cam_embed = cam_embed.reshape(cam_embed.shape[0], 1, self.latent_dim)  # (B, 1, latent_dim)
         cam_embed = cam_embed.expand(cam_embed.shape[0], frames, self.latent_dim)  # (B, T, latent_dim)
         return cam_embed
 
@@ -266,7 +266,7 @@ class BinocularFormer(BaseModel):
 
         x = self.seqTransEncoder(x)  # (B, T * 2, latent_dim)
         x = self.head(x)  # (B, T * 2, J * 3 + 7)
-        pred_pose = x[:, :, : joints * 3].view(bs, frames * 2, joints, 3)  # (B, T * 2, J, 3)
+        pred_pose = x[:, :, : joints * 3].reshape(bs, frames * 2, joints, 3)  # (B, T * 2, J, 3)
         pred_pose1 = pred_pose[:, :frames, :, :]  # (B, T, J, 3)
         pred_pose2 = pred_pose[:, frames:, :, :]  # (B, T, J, 3)
         pred_pose = torch.cat([pred_pose1, pred_pose2], dim=-1)
