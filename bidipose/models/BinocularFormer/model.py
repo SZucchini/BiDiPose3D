@@ -233,7 +233,7 @@ class BinocularFormer(BaseModel):
             batch_first=True,
         )
         self.seqTransEncoder = nn.TransformerEncoder(transformer_encoder_layer, num_layers=num_layers)
-        self.head = nn.Linear(latent_dim, num_joints * 10)
+        self.head = nn.Linear(latent_dim, num_joints * 3 + 7)
 
     def forward(
         self,
@@ -265,13 +265,13 @@ class BinocularFormer(BaseModel):
             x = x + time_embed  # (B, T * 2, latent_dim)
 
         x = self.seqTransEncoder(x)  # (B, T * 2, latent_dim)
-        x = self.head(x)  # (B, T * 2, J * 10)
-        x = x.view(bs, frames * 2, joints, 10)
-        pred_pose1 = x[:, :frames, :, :3]  # (B, T, J, 3)
-        pred_pose2 = x[:, frames:, :, :3]  # (B, T, J, 3)
+        x = self.head(x)  # (B, T * 2, J * 3 + 7)
+        pred_pose = x[:, :, : joints * 3].view(bs, frames * 2, joints, 3)  # (B, T * 2, J, 3)
+        pred_pose1 = pred_pose[:, :frames, :, :]  # (B, T, J, 3)
+        pred_pose2 = pred_pose[:, frames:, :, :]  # (B, T, J, 3)
         pred_pose = torch.cat([pred_pose1, pred_pose2], dim=-1)
 
-        pred_cam_params = x[:, frames:, :, 3:].mean(dim=1).mean(dim=1)  # (B, 7)
+        pred_cam_params = x[:, frames:, joints * 3 :].mean(dim=1)  # (B, 7)
         pred_quat = pred_cam_params[:, :4]
         pred_quat = F.normalize(pred_quat, dim=1)
         mask = pred_quat[..., 0] < 0
